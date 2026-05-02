@@ -91,3 +91,15 @@ export interface KeystaticConfig {
     schema: Record<string, KeystaticField>
   }>
 }
+
+export interface NavItem {
+  label: string
+  href: string
+  children?: NavItem[]
+}
+
+export interface WPSiteInfo {
+  title: string
+  url: string
+  description: string
+}

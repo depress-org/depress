@@ -56,3 +56,9 @@
 - Keep new cross-package types in `@depress/core`; avoid importing engine internals directly across package boundaries.
 - For migration behavior changes, update both transformation logic and generated `keystatic.config.ts` assumptions together.
 - Because there is no test suite yet, validate via `npm run build` and `npm run typecheck` at minimum, then run CLI against a real WXR sample (for example `examples/mamas-blog/sources/insight.WordPress.2026-05-02.xml`).
+
+## ⚠️ Temporary Files — ALWAYS Use `./.tmp`
+- **NEVER write to `/tmp` or any system temp directory.** All temporary files (XML patches, wp2md intermediate output, downloaded media, scratch files) MUST go into `./.tmp/` at the project root.
+- Sub-directories should be scoped, e.g. `.tmp/wp2md/`, `.tmp/patched-xml/`, `.tmp/migrate-output/`.
+- `.tmp/` is gitignored. Always clean it up via `rollback.ts` when the migration scope includes temp work.
+- This applies to all agent-generated scripts, inline shell commands, and Node.js code — never use `os.tmpdir()`, `/tmp/`, or `/var/folders/` paths for project-related artifacts.

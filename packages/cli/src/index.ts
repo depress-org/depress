@@ -22,13 +22,31 @@ program
 
 program
   .command('migrate')
-  .description('Migrate WordPress site to Astro + Keystatic')
+  .description('Migrate WordPress site to Astro + Keystatic (full pipeline)')
   .option('-i, --input <path>', 'Path to WordPress XML export file')
-  .option('-m, --media <path>', 'Path to WordPress media folder (wp-content/uploads)')
+  .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (for local image serving)')
   .option('-o, --output <path>', 'Output directory', './output')
+  .option('--repo <owner/repo>', 'GitHub repo for Keystatic config (e.g. my-org/my-blog)')
   .action(async (options) => {
     const { runMigrate } = await import('./commands/migrate.js')
     await runMigrate(options)
+  })
+
+program
+  .command('wp2md')
+  .description('Migrate WordPress export to Markdown using wordpress-export-to-markdown')
+  .requiredOption('-i, --input <path>', 'Path to WordPress XML export file')
+  .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (enables local media serving)')
+  .option('-o, --output <path>', 'Output directory', './output')
+  .option('--save-images <mode>', 'Which images to save: all | attached | scraped | none', 'all')
+  .option('--post-folders <bool>', 'Put each post in its own folder', (v) => v !== 'false', true)
+  .option('--prefix-date <bool>', 'Add date prefix to post folder/file names', (v) => v !== 'false', false)
+  .option('--date-folders <mode>', 'Organise posts into date folders: none | year | year-month', 'none')
+  .option('--strict-ssl <bool>', 'Use strict SSL when downloading images', (v) => v !== 'false', true)
+  .option('--request-delay <ms>', 'Delay in ms between image download requests', (v) => parseInt(v, 10), 500)
+  .action(async (options) => {
+    const { runWp2md } = await import('./commands/wp2md.js')
+    await runWp2md(options)
   })
 
 program
