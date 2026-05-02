@@ -54,3 +54,11 @@ coverage/
 .temp/
 .tmp/
 *.tgz
+
+# Example site — personal content (run `npx @depress-dev/depress migrate` to regenerate)
+examples/mamas-blog/src/content/articles/
+examples/mamas-blog/src/content/pages/
+examples/mamas-blog/src/content/categories/
+examples/mamas-blog/src/content/tags/
+examples/mamas-blog/public/media/
+examples/mamas-blog/sources/

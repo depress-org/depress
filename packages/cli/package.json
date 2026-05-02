@@ -1,5 +1,5 @@
 {
-  "name": "depress",
+  "name": "@depress-dev/depress",
   "version": "0.1.0",
   "description": "De-press yourself. Migrate any WordPress blog to Astro + Keystatic in minutes. Free hosting forever.",
   "type": "module",

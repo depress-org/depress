@@ -23,7 +23,7 @@ npm publish --access public
 cd ../..
 
 echo ""
-echo "Publishing depress (CLI)..."
+echo "Publishing @depress-dev/depress (CLI)..."
 cd packages/cli
 npm publish --access public
 cd ../..
@@ -31,4 +31,4 @@ cd ../..
 echo ""
 echo "All packages published!"
 echo ""
-echo "Test with: npx depress --version"
+echo "Test with: npx @depress-dev/depress --version"

@@ -2,9 +2,9 @@
 
 > *De-press yourself.* Migrate any WordPress blog to **Astro + Keystatic** in minutes. Free hosting forever.
 
-[![npm](https://img.shields.io/npm/v/depress)](https://npmjs.com/package/depress)
+[![npm](https://img.shields.io/npm/v/%40depress-dev%2Fdepress)](https://npmjs.com/package/@depress-dev/depress)
 [![license](https://img.shields.io/github/license/depress-dev/depress)](LICENSE)
-[![node](https://img.shields.io/node/v/depress)](https://npmjs.com/package/depress)
+[![node](https://img.shields.io/node/v/%40depress-dev%2Fdepress)](https://npmjs.com/package/@depress-dev/depress)
 
 ## Why?
 
@@ -38,10 +38,10 @@ $20-50/month           →        $0/month. Forever.
 
 ```bash
 # Put your export.xml in the current folder, then:
-npx depress migrate
+npx @depress-dev/depress migrate
 
 # Or specify paths explicitly:
-npx depress migrate --input export.xml --wp-dir ./public_html --output ./my-blog
+npx @depress-dev/depress migrate --input export.xml --wp-dir ./public_html --output ./my-blog
 ```
 
 Then:
@@ -56,7 +56,7 @@ npm start         # installs deps + starts dev server
 ### Start a new blog from scratch
 
 ```bash
-npx depress init
+npx @depress-dev/depress init
 ```
 
 ## Migration workflow
@@ -68,10 +68,10 @@ npx depress init
 **Step 2** — Run depress:
 ```bash
 # With only the XML (images downloaded from your live site):
-npx depress migrate --input export.xml
+npx @depress-dev/depress migrate --input export.xml
 
 # With local WP folder (images served locally, faster + works offline):
-npx depress migrate --input export.xml --wp-dir ./public_html
+npx @depress-dev/depress migrate --input export.xml --wp-dir ./public_html
 ```
 
 **Step 3** — Start your new blog:
@@ -127,7 +127,7 @@ output/
 
 | Package | Description |
 |---------|-------------|
-| [`depress`](https://npmjs.com/package/depress) | Main CLI |
+| [`@depress-dev/depress`](https://npmjs.com/package/@depress-dev/depress) | Main CLI |
 | [`@depress-dev/core`](https://npmjs.com/package/@depress-dev/core) | Shared types |
 | [`@depress-dev/wp-migrate`](https://npmjs.com/package/@depress-dev/wp-migrate) | Migration engine |
 
