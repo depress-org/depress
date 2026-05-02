@@ -8,6 +8,8 @@ export interface TransformOptions {
   wp2mdDir: string
   /** Root output directory for the new Astro project */
   outputDir: string
+  /** Category slug → display name map for human-readable labels in frontmatter */
+  categoryNames?: Map<string, string>
 }
 
 export interface TransformResult {
@@ -219,7 +221,7 @@ async function walkTypeDir(
 // ── Main transform entry point ───────────────────────────────────────────────
 
 export async function transformWp2mdOutput(options: TransformOptions): Promise<TransformResult> {
-  const { wp2mdDir, outputDir } = options
+  const { wp2mdDir, outputDir, categoryNames } = options
 
   const articlesDir = join(outputDir, 'src', 'content', 'articles')
   const pagesDir = join(outputDir, 'src', 'content', 'pages')
@@ -232,12 +234,20 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
   // Shared image registry to detect filename collisions across all posts+pages
   const imageRegistry = new Map<string, string>()
 
+  const articleFmBuilder = (raw: Record<string, unknown>, body: string) => {
+    const fm = buildArticleFrontmatter(raw, body)
+    if (categoryNames && typeof fm.category === 'string') {
+      fm.category = categoryNames.get(fm.category) ?? fm.category
+    }
+    return fm
+  }
+
   // Transform posts → articles
   const postsResult = await walkTypeDir(
     join(wp2mdDir, 'posts'),
     articlesDir,
     mediaDir,
-    buildArticleFrontmatter,
+    articleFmBuilder,
     imageRegistry,
   )
 
@@ -246,7 +256,7 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
     join(wp2mdDir, 'posts', '_drafts'),
     join(articlesDir, '_drafts'),
     mediaDir,
-    buildArticleFrontmatter,
+    articleFmBuilder,
     imageRegistry,
     true,
   )

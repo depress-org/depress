@@ -27,7 +27,7 @@ function genPackageJson(siteTitle: string): string {
       version: '0.1.0',
       private: true,
       scripts: {
-        setup: 'npm install',
+        setup: "node -e \"require('fs').existsSync('node_modules')||require('child_process').execSync('npm install',{stdio:'inherit'})\"",
         dev: 'npm run setup && astro dev',
         start: 'npm run setup && astro dev',
         build: 'npm run setup && astro build',

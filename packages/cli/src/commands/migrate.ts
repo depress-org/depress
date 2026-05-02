@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import ora from 'ora'
 import inquirer from 'inquirer'
-import { readFile, writeFile, mkdir, mkdtemp, rm } from 'fs/promises'
+import { readFile, writeFile, mkdir, mkdtemp, rm, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
@@ -181,6 +181,23 @@ export async function runMigrate(options: MigrateOptions) {
 
   const wpDir = options.wpDir ? resolve(options.wpDir) : undefined
 
+  // Confirm before overwriting an existing output directory
+  if (existsSync(outputDir)) {
+    const entries = await readdir(outputDir).catch(() => [])
+    if (entries.length > 0) {
+      const { overwrite } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'overwrite',
+        message: `Output directory ${chalk.cyan(outputDir)} already exists. Overwrite? (your changes will be lost)`,
+        default: false,
+      }])
+      if (!overwrite) {
+        console.log(chalk.yellow('Migration cancelled.'))
+        process.exit(0)
+      }
+    }
+  }
+
   // Step 1: Parse WXR for site metadata + navigation
   const parseSpinner = ora('Reading WordPress export…').start()
   let wpExport: Awaited<ReturnType<typeof parseWPExport>>
@@ -220,7 +237,8 @@ export async function runMigrate(options: MigrateOptions) {
   let transformResult: Awaited<ReturnType<typeof transformWp2mdOutput>>
   try {
     await mkdir(outputDir, { recursive: true })
-    transformResult = await transformWp2mdOutput({ wp2mdDir: wp2mdOut, outputDir })
+    const categoryNames = new Map(wpExport.categories.map((c) => [c.slug, c.name]))
+    transformResult = await transformWp2mdOutput({ wp2mdDir: wp2mdOut, outputDir, categoryNames })
     transformSpinner.succeed(
       `Transformed: ${chalk.green(String(transformResult.postsTransformed))} articles, ` +
       `${chalk.green(String(transformResult.pagesTransformed))} pages, ` +
@@ -270,6 +288,13 @@ export async function runMigrate(options: MigrateOptions) {
   console.log(`  Articles : ${chalk.bold(String(transformResult.postsTransformed))}`)
   console.log(`  Pages    : ${chalk.bold(String(transformResult.pagesTransformed))}`)
   console.log(`  Media    : ${chalk.bold(String(transformResult.imagesCopied))} files`)
+
+  if (transformResult.imageFailed.length > 0) {
+    console.log(chalk.yellow(`\n⚠️  ${transformResult.imageFailed.length} image(s) could not be copied:`))
+    for (const msg of transformResult.imageFailed) {
+      console.log(chalk.gray(`    • ${msg}`))
+    }
+  }
   console.log()
   console.log(chalk.bold('Next steps:'))
   console.log(`  ${chalk.cyan(`cd ${options.output}`)}`)
