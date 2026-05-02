@@ -1,0 +1,43 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import { getCollection } from 'astro:content'
+
+export async function getStaticPaths() {
+  const pages = await getCollection('pages')
+  return pages.map((page) => ({
+    params: { slug: page.slug },
+    props: { page },
+  }))
+}
+
+const { page } = Astro.props
+const { Content } = await page.render()
+---
+
+<BaseLayout title={page.data.title} description={page.data.seoDescription ?? ''}>
+  <article>
+    <h1 class="text-3xl font-bold text-gray-900 font-serif mb-8">{page.data.title}</h1>
+    <div class="prose prose-gray max-w-none">
+      <Content />
+    </div>
+  </article>
+</BaseLayout>
+
+<style is:global>
+  .prose h1,
+  .prose h2,
+  .prose h3 {
+    font-family: Georgia, serif;
+    color: #111827;
+  }
+  .prose p {
+    line-height: 1.8;
+    color: #374151;
+  }
+  .prose a {
+    color: #2563eb;
+  }
+  .prose a:hover {
+    color: #1d4ed8;
+  }
+</style>

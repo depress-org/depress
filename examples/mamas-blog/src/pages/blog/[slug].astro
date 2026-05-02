@@ -1,0 +1,91 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import { getCollection } from 'astro:content'
+
+export async function getStaticPaths() {
+  const articles = await getCollection('articles')
+  return articles.map((article) => ({
+    params: { slug: article.slug },
+    props: { article },
+  }))
+}
+
+const { article } = Astro.props
+const { Content } = await article.render()
+
+const formattedDate = article.data.publishedAt
+  ? new Date(article.data.publishedAt).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  : null
+---
+
+<BaseLayout
+  title={article.data.seoTitle ?? article.data.title}
+  description={article.data.seoDescription ?? article.data.excerpt ?? ''}
+>
+  <article>
+    <header class="mb-10">
+      {
+        article.data.category && (
+          <span class="text-xs font-medium text-blue-600 uppercase tracking-wide mb-3 block">
+            {article.data.category}
+          </span>
+        )
+      }
+      <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 font-serif leading-tight mb-4">
+        {article.data.title}
+      </h1>
+      {article.data.excerpt && <p class="text-lg text-gray-500 leading-relaxed">{article.data.excerpt}</p>}
+      {formattedDate && <time class="text-sm text-gray-400 mt-3 block">{formattedDate}</time>}
+    </header>
+
+    <div class="prose prose-gray max-w-none">
+      <Content />
+    </div>
+
+    {
+      article.data.tags && article.data.tags.length > 0 && (
+        <div class="mt-10 pt-6 border-t border-gray-100 flex flex-wrap gap-2">
+          {article.data.tags.map((tag) => (
+            <span class="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full">{tag}</span>
+          ))}
+        </div>
+      )
+    }
+  </article>
+
+  <div class="mt-12 pt-8 border-t border-gray-100">
+    <a href="/blog" class="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+      ← All articles
+    </a>
+  </div>
+</BaseLayout>
+
+<style is:global>
+  .prose h1,
+  .prose h2,
+  .prose h3 {
+    font-family: Georgia, serif;
+    color: #111827;
+  }
+  .prose p {
+    line-height: 1.8;
+    color: #374151;
+  }
+  .prose a {
+    color: #2563eb;
+  }
+  .prose a:hover {
+    color: #1d4ed8;
+  }
+  .prose img {
+    border-radius: 0.5rem;
+  }
+  .prose blockquote {
+    border-left-color: #e5e7eb;
+    color: #6b7280;
+  }
+</style>

@@ -1,0 +1,40 @@
+---
+interface Props {
+  title: string
+  slug: string
+  excerpt?: string
+  publishedAt?: string
+  category?: string
+}
+
+const { title, slug, excerpt, publishedAt, category } = Astro.props
+
+const formattedDate = publishedAt
+  ? new Date(publishedAt).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  : null
+---
+
+<article class="group border border-gray-200 rounded-xl p-6 hover:border-gray-300 hover:shadow-sm transition-all">
+  <a href={`/blog/${slug}`} class="block">
+    {
+      category && (
+        <span class="text-xs font-medium text-blue-600 uppercase tracking-wide mb-2 block">
+          {category}
+        </span>
+      )
+    }
+    <h2 class="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-700 transition-colors leading-snug">
+      {title}
+    </h2>
+    {excerpt && <p class="text-gray-500 text-sm leading-relaxed line-clamp-3">{excerpt}</p>}
+    {
+      formattedDate && (
+        <time class="text-xs text-gray-400 mt-3 block">{formattedDate}</time>
+      )
+    }
+  </a>
+</article>

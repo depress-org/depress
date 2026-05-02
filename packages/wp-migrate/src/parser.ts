@@ -53,7 +53,8 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
     const cats = Array.isArray(item.category) ? item.category : item.category ? [item.category] : []
     for (const cat of cats) {
       const domain = cat._domain
-      const slug = cat._nicename
+      const rawSlug = cat._nicename
+      const slug = decodeSlug(rawSlug)
       const name = cat['#text'] ?? slug
 
       if (domain === 'category') {
@@ -72,7 +73,7 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
     posts.push({
       id: item['wp:post_id'],
       title: item.title ?? 'Untitled',
-      slug: item['wp:post_name'] ?? String(item['wp:post_id']),
+      slug: decodeSlug(item['wp:post_name'] ?? String(item['wp:post_id'])),
       content: item['content:encoded'] ?? '',
       excerpt: item['excerpt:encoded'] ?? '',
       status: item['wp:status'] ?? 'draft',
@@ -90,5 +91,13 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
     categories: Array.from(categoriesMap.values()),
     tags: Array.from(tagsMap.values()),
     media,
+  }
+}
+
+function decodeSlug(slug: string): string {
+  try {
+    return decodeURIComponent(slug)
+  } catch {
+    return slug
   }
 }

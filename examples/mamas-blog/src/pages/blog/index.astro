@@ -1,0 +1,32 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import ArticleCard from '../../components/ui/ArticleCard.astro'
+import { getCollection } from 'astro:content'
+
+const articles = (await getCollection('articles')).sort(
+  (a, b) =>
+    new Date(b.data.publishedAt ?? 0).getTime() - new Date(a.data.publishedAt ?? 0).getTime(),
+)
+---
+
+<BaseLayout title="All Articles" description="Browse all articles.">
+  <h1 class="text-3xl font-bold text-gray-900 mb-8 font-serif">All Articles</h1>
+
+  {
+    articles.length > 0 ? (
+      <div class="grid gap-4 sm:grid-cols-2">
+        {articles.map((article) => (
+          <ArticleCard
+            title={article.data.title}
+            slug={article.slug}
+            excerpt={article.data.excerpt}
+            publishedAt={article.data.publishedAt}
+            category={article.data.category}
+          />
+        ))}
+      </div>
+    ) : (
+      <p class="text-gray-400 text-center py-20">No articles yet.</p>
+    )
+  }
+</BaseLayout>

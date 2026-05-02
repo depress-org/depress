@@ -1,0 +1,8 @@
+# Cloudflare Pages redirects
+# Add your WordPress URL redirects here after migration.
+# Format: /old-path  /new-path  301
+#
+# Examples:
+# /2024/01/my-post-slug/  /blog/my-post-slug  301
+# /?p=123  /blog/my-post-slug  301
+# /category/psychology/  /blog  301

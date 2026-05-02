@@ -1,0 +1,16 @@
+---
+const year = new Date().getFullYear()
+---
+
+<footer class="border-t border-gray-100 bg-gray-50 mt-auto">
+  <div class="container mx-auto px-4 max-w-3xl py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
+    <p>&copy; {year} All rights reserved.</p>
+    <p>
+      Built with <a href="https://astro.build" class="hover:text-gray-600 transition-colors">Astro</a>
+      {' '}+{' '}
+      <a href="https://keystatic.com" class="hover:text-gray-600 transition-colors">Keystatic</a>
+      {' '}+{' '}
+      <a href="https://pages.cloudflare.com" class="hover:text-gray-600 transition-colors">Cloudflare Pages</a>
+    </p>
+  </div>
+</footer>
