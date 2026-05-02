@@ -1,4 +1,4 @@
-import type { WPExport, KeystaticConfig } from '@depress/core'
+import type { WPExport, KeystaticConfig } from '@depress-dev/core'
 
 /**
  * Generate keystatic.config.ts based on analyzed WordPress content structure.

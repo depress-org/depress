@@ -1,6 +1,6 @@
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
-import type { NavItem } from '@depress/core'
+import type { NavItem } from '@depress-dev/core'
 
 export interface ScaffoldOptions {
   siteTitle: string
@@ -38,6 +38,7 @@ function genPackageJson(siteTitle: string): string {
         '@astrojs/cloudflare': '^10.0.0',
         '@astrojs/markdoc': '^0.11.0',
         '@astrojs/react': '^3.6.0',
+        '@astrojs/sitemap': '^3.0.0',
         '@astrojs/tailwind': '^5.1.0',
         '@keystatic/astro': '^5.0.0',
         '@keystatic/core': '^0.5.0',
@@ -518,6 +519,55 @@ const { Content } = await page.render()
 `
 }
 
+function genCategorySlugPage(): string {
+  return `---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import ArticleCard from '../../components/ui/ArticleCard.astro'
+import { getCollection } from 'astro:content'
+
+export async function getStaticPaths() {
+  const articles = await getCollection('articles')
+  const categorySet = new Set(articles.map((a) => a.data.category).filter(Boolean))
+  return [...categorySet].map((category) => ({
+    params: { slug: category },
+    props: { category },
+  }))
+}
+
+const { category } = Astro.props
+const articles = (await getCollection('articles'))
+  .filter((a) => a.data.category === category && !a.id.startsWith('_drafts/'))
+  .sort((a, b) => new Date(b.data.publishedAt ?? 0).getTime() - new Date(a.data.publishedAt ?? 0).getTime())
+---
+
+<BaseLayout title={category ?? 'Category'} description={\`Articles in \${category}\`}>
+  <div class="mb-8">
+    <a href="/blog" class="text-sm text-blue-600 hover:text-blue-800 transition-colors">← All articles</a>
+  </div>
+  <h1 class="text-3xl font-bold text-gray-900 font-serif mb-8">{category}</h1>
+
+  {
+    articles.length > 0 ? (
+      <div class="grid gap-4 sm:grid-cols-2">
+        {articles.map((article) => (
+          <ArticleCard
+            title={article.data.title}
+            slug={article.slug}
+            excerpt={article.data.excerpt}
+            publishedAt={article.data.publishedAt}
+            category={article.data.category}
+            coverImage={article.data.coverImage}
+          />
+        ))}
+      </div>
+    ) : (
+      <p class="text-gray-400 text-center py-20">No articles found.</p>
+    )
+  }
+</BaseLayout>
+`
+}
+
 function genKeystatiParams(): string {
   return `---
 export const prerender = false
@@ -776,6 +826,7 @@ export async function scaffoldAstroProject(
     ['src/pages/blog/[slug].astro', genBlogSlugPage()],
     ['src/pages/[...slug].astro', genPageSlugPage()],
     ['src/pages/keystatic/[...params].astro', genKeystatiParams()],
+    ...(hasCategories ? [['src/pages/category/[slug].astro', genCategorySlugPage()] as [string, string]] : []),
   ]
 
   for (const [relPath, content] of writes) {

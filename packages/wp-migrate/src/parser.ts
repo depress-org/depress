@@ -1,4 +1,4 @@
-import type { WPExport, WPPost, WPCategory, WPTag } from '@depress/core'
+import type { WPExport, WPPost, WPCategory, WPTag } from '@depress-dev/core'
 import { XMLParser } from 'fast-xml-parser'
 import { readFile } from 'fs/promises'
 

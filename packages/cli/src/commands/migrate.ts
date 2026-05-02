@@ -1,11 +1,10 @@
 import chalk from 'chalk'
 import ora from 'ora'
+import inquirer from 'inquirer'
 import { readFile, writeFile, mkdir, mkdtemp, rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import { spawn } from 'child_process'
 import { fileURLToPath } from 'url'
 import {
@@ -13,9 +12,8 @@ import {
   parseNavFromXml,
   transformWp2mdOutput,
   scaffoldAstroProject,
-} from '@depress/wp-migrate'
+} from '@depress-dev/wp-migrate'
 
-const execFileAsync = promisify(execFile)
 
 export interface MigrateOptions {
   input?: string
@@ -158,9 +156,27 @@ export async function runMigrate(options: MigrateOptions) {
   const inputFile = await resolveInput(options.input)
 
   if (!inputFile) {
-    console.error(chalk.red('No WordPress export file found.'))
-    console.error(chalk.gray('Provide one with: depress migrate --input export.xml'))
-    process.exit(1)
+    console.log(chalk.yellow('No WordPress export XML found in current directory.'))
+    console.log(chalk.gray('  (looked for export.xml, wordpress.xml, wp-export.xml)\n'))
+    const { xmlPath } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'xmlPath',
+        message: 'Path to WordPress export .xml file:',
+        validate: (v: string) => {
+          const p = resolve(v.trim())
+          return existsSync(p) || `File not found: ${p}`
+        },
+      },
+    ])
+    const resolved = resolve(xmlPath.trim())
+    if (!existsSync(resolved)) {
+      console.error(chalk.red(`File not found: ${resolved}`))
+      process.exit(1)
+    }
+    // Re-run with the provided path (simplest approach: mutate and continue)
+    options.input = resolved
+    return runMigrate(options)
   }
 
   const wpDir = options.wpDir ? resolve(options.wpDir) : undefined
@@ -172,8 +188,8 @@ export async function runMigrate(options: MigrateOptions) {
   try {
     xmlContent = await readFile(inputFile, 'utf-8')
     wpExport = await parseWPExport(inputFile)
-    const postCount = wpExport.posts.filter(p => p.status === 'publish' && p.type === 'post').length
-    const pageCount = wpExport.posts.filter(p => p.type === 'page').length
+    const postCount = wpExport.posts.filter((p) => p.status === 'publish' && p.type === 'post').length
+    const pageCount = wpExport.posts.filter((p) => p.type === 'page').length
     parseSpinner.succeed(
       `Parsed "${chalk.bold(wpExport.siteTitle)}": ` +
       `${postCount} posts, ${pageCount} pages, ${wpExport.categories.length} categories`
