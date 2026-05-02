@@ -783,6 +783,22 @@ ${navYaml}
 `
 }
 
+function genRobotsTxt(): string {
+  return `import type { APIRoute } from 'astro'
+
+export const GET: APIRoute = ({ site }) => {
+  const siteUrl = site ? site.href.replace(/\\/$/, '') : ''
+  const body = [
+    'User-agent: *',
+    'Allow: /',
+    '',
+    ...(siteUrl ? [\`Sitemap: \${siteUrl}/sitemap-index.xml\`] : []),
+  ].join('\\n')
+  return new Response(body, { headers: { 'Content-Type': 'text/plain' } })
+}
+`
+}
+
 // ── Main scaffold function ────────────────────────────────────────────────────
 
 export async function scaffoldAstroProject(
@@ -823,6 +839,7 @@ export async function scaffoldAstroProject(
     // Pages
     ['src/pages/index.astro', genIndexPage(siteTitle, siteDescription)],
     ['src/pages/blog/index.astro', genBlogIndexPage()],
+    ['src/pages/robots.txt.ts', genRobotsTxt()],
     ['src/pages/blog/[slug].astro', genBlogSlugPage()],
     ['src/pages/[...slug].astro', genPageSlugPage()],
     ['src/pages/keystatic/[...params].astro', genKeystatiParams()],
