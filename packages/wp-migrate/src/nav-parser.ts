@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
-import type { NavItem, WPPost, WPCategory } from '@depress-dev/core'
+import type { NavItem, WPPost, WPCategory } from '@depress-org/core'
 
 interface RawNavItem {
   id: string

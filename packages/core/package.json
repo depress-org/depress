@@ -1,5 +1,5 @@
 {
-  "name": "@depress-dev/core",
+  "name": "@depress-org/core",
   "version": "0.1.0",
   "description": "Shared types for depress — WordPress to Astro + Keystatic migration tool",
   "type": "module",
@@ -26,7 +26,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/depress-dev/depress.git",
+    "url": "https://github.com/depress-org/depress.git",
     "directory": "packages/core"
   },
   "keywords": [

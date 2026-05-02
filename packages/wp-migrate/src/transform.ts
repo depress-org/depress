@@ -1,4 +1,4 @@
-import type { WPPost, MigrationReport } from '@depress-dev/core'
+import type { WPPost, MigrationReport } from '@depress-org/core'
 import TurndownService from 'turndown'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'

@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { resolve } from 'path'
 import { existsSync } from 'fs'
-import { scaffoldAstroProject } from '@depress-dev/wp-migrate'
+import { scaffoldAstroProject } from '@depress-org/wp-migrate'
 
 interface InitOptions {
   template: string

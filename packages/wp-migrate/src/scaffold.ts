@@ -1,6 +1,6 @@
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
-import type { NavItem } from '@depress-dev/core'
+import type { NavItem } from '@depress-org/core'
 
 export interface ScaffoldOptions {
   siteTitle: string
@@ -627,7 +627,7 @@ Thumbs.db
 function genReadme(siteTitle: string): string {
   return `# ${siteTitle}
 
-Migrated from WordPress using [depress](https://github.com/depress-dev/depress).
+Migrated from WordPress using [depress](https://github.com/depress-org/depress).
 
 ## Getting started
 

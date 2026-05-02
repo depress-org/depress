@@ -1,5 +1,5 @@
 {
-  "name": "@depress-dev/wp-migrate",
+  "name": "@depress-org/wp-migrate",
   "version": "0.1.0",
   "description": "WordPress migration engine for depress — converts WXR exports to Astro + Keystatic",
   "type": "module",
@@ -25,7 +25,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@depress-dev/core": "*",
+    "@depress-org/core": "*",
     "chalk": "^5.0.0",
     "fast-xml-parser": "^4.0.0",
     "gray-matter": "^4.0.0",
@@ -40,7 +40,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/depress-dev/depress.git",
+    "url": "https://github.com/depress-org/depress.git",
     "directory": "packages/wp-migrate"
   },
   "keywords": [

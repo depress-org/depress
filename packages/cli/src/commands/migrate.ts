@@ -12,7 +12,7 @@ import {
   parseNavFromXml,
   transformWp2mdOutput,
   scaffoldAstroProject,
-} from '@depress-dev/wp-migrate'
+} from '@depress-org/wp-migrate'
 
 
 export interface MigrateOptions {

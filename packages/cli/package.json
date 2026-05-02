@@ -1,5 +1,5 @@
 {
-  "name": "@depress-dev/depress",
+  "name": "@depress-org/depress",
   "version": "0.1.0",
   "description": "De-press yourself. Migrate any WordPress blog to Astro + Keystatic in minutes. Free hosting forever.",
   "type": "module",
@@ -39,20 +39,20 @@
     "wp2md",
     "cloudflare"
   ],
-  "author": "depress-dev",
+  "author": "depress-org",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/depress-dev/depress.git",
+    "url": "https://github.com/depress-org/depress.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/depress-dev/depress#readme",
+  "homepage": "https://github.com/depress-org/depress#readme",
   "bugs": {
-    "url": "https://github.com/depress-dev/depress/issues"
+    "url": "https://github.com/depress-org/depress/issues"
   },
   "dependencies": {
-    "@depress-dev/core": "*",
-    "@depress-dev/wp-migrate": "*",
+    "@depress-org/core": "*",
+    "@depress-org/wp-migrate": "*",
     "chalk": "^5.0.0",
     "commander": "^12.0.0",
     "inquirer": "^9.0.0",

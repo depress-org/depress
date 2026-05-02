@@ -11,19 +11,19 @@ echo "Building all packages..."
 npm run build
 
 echo ""
-echo "Publishing @depress-dev/core..."
+echo "Publishing @depress-org/core..."
 cd packages/core
 npm publish --access public
 cd ../..
 
 echo ""
-echo "Publishing @depress-dev/wp-migrate..."
+echo "Publishing @depress-org/wp-migrate..."
 cd packages/wp-migrate
 npm publish --access public
 cd ../..
 
 echo ""
-echo "Publishing @depress-dev/depress (CLI)..."
+echo "Publishing @depress-org/depress (CLI)..."
 cd packages/cli
 npm publish --access public
 cd ../..
@@ -31,4 +31,4 @@ cd ../..
 echo ""
 echo "All packages published!"
 echo ""
-echo "Test with: npx @depress-dev/depress --version"
+echo "Test with: npx @depress-org/depress --version"
