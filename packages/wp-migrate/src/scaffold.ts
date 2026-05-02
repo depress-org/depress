@@ -33,6 +33,8 @@ function genPackageJson(siteTitle: string): string {
         build: 'npm run setup && astro build',
         preview: 'astro preview',
         astro: 'astro',
+        'go-public': "node -e \"const fs=require('fs');fs.writeFileSync('.env',fs.readFileSync('.env','utf8').replace(/PUBLIC_SITE=\\\\S+/,'PUBLIC_SITE=true'));console.log('✅ Site is now public — rebuild to apply.')\"",
+        'go-private': "node -e \"const fs=require('fs');fs.writeFileSync('.env',fs.readFileSync('.env','utf8').replace(/PUBLIC_SITE=\\\\S+/,'PUBLIC_SITE=false'));console.log('🔒 Site is now hidden from search engines — rebuild to apply.')\"",
       },
       dependencies: {
         '@astrojs/cloudflare': '^10.0.0',
@@ -613,10 +615,9 @@ node_modules/
 # Astro
 .astro/
 
-# env files
-.env
-.env.*
-!.env.example
+# env files — .env.local for secrets, .env is committed (site config only)
+.env.local
+.env.*.local
 
 # OS
 .DS_Store
@@ -786,7 +787,14 @@ ${navYaml}
 function genRobotsTxt(): string {
   return `import type { APIRoute } from 'astro'
 
+const isPublic = import.meta.env.PUBLIC_SITE === 'true'
+
 export const GET: APIRoute = ({ site }) => {
+  if (!isPublic) {
+    return new Response('User-agent: *\\nDisallow: /\\n', {
+      headers: { 'Content-Type': 'text/plain' },
+    })
+  }
   const siteUrl = site ? site.href.replace(/\\/$/, '') : ''
   const body = [
     'User-agent: *',
@@ -796,6 +804,13 @@ export const GET: APIRoute = ({ site }) => {
   ].join('\\n')
   return new Response(body, { headers: { 'Content-Type': 'text/plain' } })
 }
+`
+}
+
+function genDotEnv(): string {
+  return `# Set to true when the site is ready for search engine indexing.
+# Run: npm run go-public
+PUBLIC_SITE=false
 `
 }
 
@@ -814,6 +829,7 @@ export async function scaffoldAstroProject(
     ['tailwind.config.mjs', genTailwindConfig()],
     ['tsconfig.json', genTsConfig()],
     ['.gitignore', genGitignore()],
+    ['.env', genDotEnv()],
     ['README.md', genReadme(siteTitle)],
     ['keystatic.config.ts', genKeystatiConfig(siteTitle, hasCategories, hasTags)],
 
