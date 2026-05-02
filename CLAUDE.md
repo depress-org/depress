@@ -43,13 +43,13 @@ depress (cli)          ← commander + inquirer CLI, imports wp-migrate and core
 
 ### Migration pipeline
 
-`@depress/wp-migrate` implements a five-step pipeline (phases 1–4 are the live path, phase 5 is TODO):
+`@depress/wp-migrate` implements a five-step pipeline (steps 1, 2, 4, 5 are implemented; step 3 is a stub/TODO):
 
 1. **`parseWPExport`** (`parser.ts`) — reads a WordPress WXR (XML) export via `fast-xml-parser`, extracts posts, pages, categories, tags, and attachments into `WPExport`
 2. **`transformPosts`** (`transform.ts`) — converts HTML content to Markdown via `turndown`, strips WP shortcodes, writes `.mdoc` files to `src/content/articles/<slug>/index.mdoc` or `src/content/pages/<slug>/index.mdoc`; only `publish`-status posts are migrated
-3. **`migrateMedia`** (`media.ts`) — stub, not yet implemented
+3. **`migrateMedia`** (`media.ts`) — **stub, not yet implemented**; should scan `wp-content/uploads/`, copy files to `public/media/`, and return an old-URL → new-path map
 4. **`generateKeystaticConfig`** (`generate-config.ts`) — inspects the parsed `WPExport` to decide which Keystatic collections to emit (articles always; categories/tags/pages conditionally), then code-generates a `keystatic.config.ts` string
-5. **`rollback`** (`rollback.ts`) — removes migrated output dirs for targeted rollback
+5. **`rollback`** (`rollback.ts`) — removes migrated output dirs for targeted rollback; accepts scope `'all' | 'articles' | 'pages' | 'media'`
 
 ### CLI commands
 
