@@ -1,0 +1,19 @@
+{
+  "name": "@depress/core",
+  "version": "0.1.0",
+  "description": "Shared types and utilities for depress",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/depress-dev/depress.git",
+    "directory": "packages/core"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "depress-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "De-press yourself. WordPress to Astro + Keystatic migration tool.",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "clean": "find . -name 'dist' -type d -not -path '*/node_modules/*' | xargs rm -rf"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

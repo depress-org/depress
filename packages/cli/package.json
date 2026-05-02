@@ -1,0 +1,49 @@
+{
+  "name": "depress",
+  "version": "0.1.0",
+  "description": "De-press yourself. WordPress to Astro + Keystatic migration tool.",
+  "type": "module",
+  "bin": {
+    "depress": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "wordpress",
+    "migration",
+    "astro",
+    "keystatic",
+    "static-site",
+    "cms",
+    "cli"
+  ],
+  "author": "depress-dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/depress-dev/depress.git",
+    "directory": "packages/cli"
+  },
+  "dependencies": {
+    "@depress/core": "*",
+    "@depress/wp-migrate": "*",
+    "commander": "^12.0.0",
+    "inquirer": "^9.0.0",
+    "chalk": "^5.0.0",
+    "ora": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "@types/inquirer": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
