@@ -131,6 +131,12 @@ output/
 | [`@depress-org/core`](https://npmjs.com/package/@depress-org/core) | Shared types |
 | [`@depress-org/wp-migrate`](https://npmjs.com/package/@depress-org/wp-migrate) | Migration engine |
 
+## Sponsoring
+
+depress is free and open-source. If it saved you a WordPress hosting bill, consider sponsoring:
+
+**[❤️ Sponsor on GitHub](https://github.com/sponsors/bullwinkle)**
+
 ## License
 
 MIT © [depress-org](https://github.com/depress-org)

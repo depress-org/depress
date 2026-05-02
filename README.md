@@ -5,6 +5,7 @@
 [![npm](https://img.shields.io/npm/v/%40depress-org%2Fdepress)](https://npmjs.com/package/@depress-org/depress)
 [![license](https://img.shields.io/github/license/depress-org/depress)](LICENSE)
 [![node](https://img.shields.io/node/v/%40depress-org%2Fdepress)](https://npmjs.com/package/@depress-org/depress)
+[![sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-ea4aaa?logo=github-sponsors)](https://github.com/sponsors/bullwinkle)
 
 ## Why?
 
@@ -130,6 +131,22 @@ output/
 | [`@depress-org/depress`](https://npmjs.com/package/@depress-org/depress) | Main CLI |
 | [`@depress-org/core`](https://npmjs.com/package/@depress-org/core) | Shared types |
 | [`@depress-org/wp-migrate`](https://npmjs.com/package/@depress-org/wp-migrate) | Migration engine |
+
+## Contributing
+
+PRs welcome! This is a monorepo — see [CLAUDE.md](CLAUDE.md) for build commands and architecture notes.
+
+Good first issues to tackle:
+- [ ] `migrateMedia` in `packages/wp-migrate/src/media.ts` — currently a stub, needs to copy `wp-content/uploads/` and rewrite image URLs
+- [ ] `depress init` scaffolding — interactive new-blog wizard
+- [ ] `depress deploy` — Cloudflare Pages deploy automation
+- [ ] Tests — there are none yet
+
+## Sponsoring
+
+depress is free and open-source. If it saved you a WordPress hosting bill, consider sponsoring:
+
+**[❤️ Sponsor on GitHub](https://github.com/sponsors/bullwinkle)**
 
 ## License
 
