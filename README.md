@@ -81,10 +81,78 @@ cd output
 npm start
 ```
 
-**Step 4** — Deploy for free:
-- Push to GitHub
-- Connect repo to [Cloudflare Pages](https://pages.cloudflare.com) (build command: `npm run build`, output: `dist/`)
-- Update `keystatic.config.ts` to use `kind: 'github'` for production CMS
+**Step 4** — Deploy for free (pick one):
+
+<details>
+<summary>☁️ Cloudflare Pages <em>(recommended — fastest CDN, generous free tier)</em></summary>
+
+1. Push your blog to a GitHub or GitLab repo
+2. Go to [Cloudflare Pages](https://pages.cloudflare.com) → Create application → Connect to Git
+3. Build command: `npm run build` · Output directory: `dist/`
+4. In `keystatic.config.ts` switch to GitHub-backed CMS for production:
+   ```ts
+   export default config({
+     storage: { kind: 'github', repo: 'your-org/your-repo' },
+     // ...
+   })
+   ```
+
+</details>
+
+<details>
+<summary>🐙 GitHub Pages</summary>
+
+1. Push your blog to a GitHub repo
+2. Create `.github/workflows/deploy.yml`:
+   ```yaml
+   name: Deploy to GitHub Pages
+   on:
+     push:
+       branches: [main]
+   jobs:
+     deploy:
+       runs-on: ubuntu-latest
+       permissions:
+         contents: read
+         pages: write
+         id-token: write
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-node@v4
+           with: { node-version: 20 }
+         - run: npm ci && npm run build
+         - uses: actions/upload-pages-artifact@v3
+           with: { path: dist/ }
+         - uses: actions/deploy-pages@v4
+   ```
+3. In repo Settings → Pages → Source: select **GitHub Actions**
+4. Note: Keystatic CMS requires a server — on GitHub Pages use `kind: 'local'` for local editing only, or self-host the CMS separately.
+
+</details>
+
+<details>
+<summary>🦊 GitLab Pages</summary>
+
+1. Push your blog to a GitLab repo
+2. Create `.gitlab-ci.yml` at the repo root:
+   ```yaml
+   pages:
+     image: node:20
+     script:
+       - npm ci
+       - npm run build
+       - mv dist public
+     artifacts:
+       paths:
+         - public
+     only:
+       - main
+   ```
+3. GitLab Pages serves from the `public/` directory — the `mv dist public` handles that.
+4. Your blog will be live at `https://<username>.gitlab.io/<repo>` after the first pipeline completes.
+5. Same CMS note as GitHub Pages: use `kind: 'local'` for local editing, or pair with Cloudflare Pages for full Keystatic support.
+
+</details>
 
 ## Options
 
