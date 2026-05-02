@@ -1,4 +1,4 @@
-# depress 🔓
+# depress 🦋
 
 > *De-press yourself.* Migrate any WordPress blog to **Astro + Keystatic** in minutes. Free hosting forever.
 
