@@ -26,16 +26,21 @@ function decodeSlug(slug: string): string {
   try { return decodeURIComponent(slug) } catch { return slug }
 }
 
+interface RawNavItemWithMenu extends RawNavItem {
+  menuSlug: string
+}
+
 /**
  * Parse WordPress nav menu items from WXR XML.
- * Falls back to a default nav if the WXR data is too sparse.
+ * Returns a map from menu slug to its NavItem tree.
+ * Falls back to { primary: fallbackNav } if the WXR data is too sparse.
  */
 export function parseNavFromXml(
   xml: string,
   posts: WPPost[],
   categories: WPCategory[],
   siteUrl: string,
-): NavItem[] {
+): Record<string, NavItem[]> {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '_',
@@ -48,10 +53,10 @@ export function parseNavFromXml(
     const result = parser.parse(xml)
     channel = result?.rss?.channel
   } catch {
-    return buildFallbackNav(posts, categories)
+    return { primary: buildFallbackNav(posts, categories) }
   }
 
-  if (!channel) return buildFallbackNav(posts, categories)
+  if (!channel) return { primary: buildFallbackNav(posts, categories) }
 
   const items: any[] = Array.isArray(channel.item) ? channel.item : []
 
@@ -75,8 +80,8 @@ export function parseNavFromXml(
     }
   }
 
-  // Extract nav_menu_item entries
-  const rawNavItems: RawNavItem[] = []
+  // Extract nav_menu_item entries, tagging each with its menu slug
+  const rawNavItems: RawNavItemWithMenu[] = []
   for (const item of items) {
     if (item['wp:post_type'] !== 'nav_menu_item') continue
 
@@ -85,6 +90,16 @@ export function parseNavFromXml(
       : item['wp:postmeta']
       ? [item['wp:postmeta']]
       : []
+
+    // Determine which menu this item belongs to via category tag
+    const cats: any[] = Array.isArray(item['category']) ? item['category'] : item['category'] ? [item['category']] : []
+    let menuSlug = 'primary'
+    for (const cat of cats) {
+      if (cat._domain === 'nav_menu') {
+        menuSlug = cat._nicename || cat['#text'] || 'primary'
+        break
+      }
+    }
 
     rawNavItems.push({
       id: String(item['wp:post_id'] ?? ''),
@@ -95,15 +110,16 @@ export function parseNavFromXml(
       type: getMeta(metas, '_menu_item_type'),
       object: getMeta(metas, '_menu_item_object'),
       objectId: getMeta(metas, '_menu_item_object_id'),
+      menuSlug,
     })
   }
 
   if (rawNavItems.length === 0) {
-    return buildFallbackNav(posts, categories)
+    return { primary: buildFallbackNav(posts, categories) }
   }
 
   // Resolve href for each item
-  const resolved: Array<NavItem & { id: string; parentId: string; order: number }> = []
+  const resolved: Array<NavItem & { id: string; parentId: string; order: number; menuSlug: string }> = []
 
   for (const raw of rawNavItems) {
     let href = ''
@@ -147,33 +163,43 @@ export function parseNavFromXml(
       order: raw.menuOrder,
       label: label || href,
       href: href || '/',
+      menuSlug: raw.menuSlug,
     })
   }
 
-  // Build tree — top-level only (parentId === '0')
-  const topLevel = resolved
-    .filter((item) => item.parentId === '0' && item.href)
-    .sort((a, b) => a.order - b.order)
+  // Group by menu slug and build per-menu tree
+  const menuSlugs = [...new Set(resolved.map((r) => r.menuSlug))]
+  const allMenus: Record<string, NavItem[]> = {}
 
-  // Add children (one level deep)
-  const navItems: NavItem[] = topLevel.map((parent) => {
-    const children = resolved
-      .filter((c) => c.parentId === parent.id && c.href)
+  for (const slug of menuSlugs) {
+    const menuResolved = resolved.filter((r) => r.menuSlug === slug)
+
+    const topLevel = menuResolved
+      .filter((item) => item.parentId === '0' && item.href)
       .sort((a, b) => a.order - b.order)
-      .map(({ label, href }) => ({ label, href }))
 
-    return children.length > 0
-      ? { label: parent.label, href: parent.href, children }
-      : { label: parent.label, href: parent.href }
-  })
+    const navItems: NavItem[] = topLevel.map((parent) => {
+      const children = menuResolved
+        .filter((c) => c.parentId === parent.id && c.href)
+        .sort((a, b) => a.order - b.order)
+        .map(({ label, href }) => ({ label, href }))
 
-  // If we got less than 2 meaningful nav items, use fallback
-  const meaningful = navItems.filter((n) => n.href && n.label && n.label !== 'insight-logo')
-  if (meaningful.length < 2) {
-    return buildFallbackNav(posts, categories)
+      return children.length > 0
+        ? { label: parent.label, href: parent.href, children }
+        : { label: parent.label, href: parent.href }
+    })
+
+    const meaningful = navItems.filter((n) => n.href && n.label && n.label !== 'insight-logo')
+    if (meaningful.length >= 2) {
+      allMenus[slug] = meaningful
+    }
   }
 
-  return meaningful
+  if (Object.keys(allMenus).length === 0) {
+    return { primary: buildFallbackNav(posts, categories) }
+  }
+
+  return allMenus
 }
 
 /**

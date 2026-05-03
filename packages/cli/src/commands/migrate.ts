@@ -12,6 +12,12 @@ import {
   parseNavFromXml,
   transformWp2mdOutput,
   scaffoldAstroProject,
+  provisionTheme,
+  clearSampleContent,
+  injectContent,
+  getThemeAdapter,
+  listThemes,
+  DEFAULT_THEME_ID,
 } from '@depress-org/wp-migrate'
 
 
@@ -20,6 +26,7 @@ export interface MigrateOptions {
   wpDir?: string
   output: string
   repo?: string
+  theme?: string
 }
 
 // ── Helper: resolve wp2md bin ─────────────────────────────────────────────────
@@ -216,8 +223,10 @@ export async function runMigrate(options: MigrateOptions) {
     process.exit(1)
   }
 
-  const navItems = parseNavFromXml(xmlContent!, wpExport.posts, wpExport.categories, wpExport.siteUrl)
-  console.log(chalk.gray(`  Navigation: ${navItems.map((n: { label: string }) => n.label).join(' · ')}`))
+  const allMenus = parseNavFromXml(xmlContent!, wpExport.posts, wpExport.categories, wpExport.siteUrl)
+  // Primary menu: prefer 'main', then 'primary', then first available
+  const navItems = allMenus['main'] ?? allMenus['primary'] ?? Object.values(allMenus)[0] ?? []
+  console.log(chalk.gray(`  Navigation: ${Object.entries(allMenus).map(([name, items]) => `${name}(${items.length})`).join(', ')}`))
 
   // Step 2: Run wp2md stage 1
   const tmpDir = await mkdtemp(join(tmpdir(), 'depress-migrate-'))
@@ -232,13 +241,32 @@ export async function runMigrate(options: MigrateOptions) {
     process.exit(1)
   }
 
-  // Step 3: Transform to Keystatic structure
+  // "scaffold" = old Keystatic-only mode (fallback / power-user escape hatch)
+  // anything else (including omitted → default "astrowind") = theme mode
+  const useScaffold = options.theme === 'scaffold'
+  const themeId = useScaffold ? null : (options.theme && options.theme !== 'default' ? options.theme : DEFAULT_THEME_ID)
+  const adapter = themeId ? getThemeAdapter(themeId) : null
+
+  if (themeId && !adapter) {
+    console.error(chalk.red(`\nUnknown theme: "${themeId}"\n`))
+    console.log(chalk.gray('Available themes:'))
+    for (const t of listThemes()) {
+      const bundledNote = t.bundled ? chalk.green(' [bundled]') : ''
+      console.log(chalk.gray(`  ${chalk.cyan(t.id.padEnd(12))} ${t.name}${bundledNote} — ${t.description}`))
+    }
+    console.log(chalk.gray(`  ${'scaffold'.padEnd(12)} Keystatic + custom Astro scaffold (no external theme)`))
+    process.exit(1)
+  }
+
+  // Step 3: Transform WP content
   const transformSpinner = ora('Transforming to Astro/Keystatic structure (stage 2)…').start()
   let transformResult: Awaited<ReturnType<typeof transformWp2mdOutput>>
+  // For theme mode, write to tmpDir so scaffold/theme files stay separate
+  const contentDest = adapter ? join(tmpDir, 'content') : outputDir
   try {
-    await mkdir(outputDir, { recursive: true })
+    await mkdir(contentDest, { recursive: true })
     const categoryNames = new Map(wpExport.categories.map((c) => [c.slug, c.name]))
-    transformResult = await transformWp2mdOutput({ wp2mdDir: wp2mdOut, outputDir, categoryNames })
+    transformResult = await transformWp2mdOutput({ wp2mdDir: wp2mdOut, outputDir: contentDest, categoryNames })
     transformSpinner.succeed(
       `Transformed: ${chalk.green(String(transformResult.postsTransformed))} articles, ` +
       `${chalk.green(String(transformResult.pagesTransformed))} pages, ` +
@@ -250,57 +278,114 @@ export async function runMigrate(options: MigrateOptions) {
     process.exit(1)
   }
 
-  // Step 4: Write taxonomy files
-  const taxSpinner = ora('Writing taxonomy entries…').start()
-  try {
-    await writeTaxonomy(wpExport.categories, wpExport.tags, outputDir)
-    taxSpinner.succeed(`Taxonomies: ${wpExport.categories.length} categories, ${wpExport.tags.length} tags`)
-  } catch (err) {
-    taxSpinner.warn(`Taxonomy write failed: ${err instanceof Error ? err.message : String(err)}`)
-  }
+  if (adapter) {
+    // ── Theme mode ──────────────────────────────────────────────────────────
+    const themeVerb = adapter.bundled ? 'Copying bundled theme' : 'Downloading theme'
+    const dlSpinner = ora(`${themeVerb}: ${chalk.bold(adapter.name)}…`).start()
+    try {
+      await mkdir(outputDir, { recursive: true })
+      await provisionTheme(adapter, outputDir)
+      await clearSampleContent(outputDir, adapter)
+      dlSpinner.succeed(`Theme ready: ${chalk.bold(adapter.name)}${adapter.bundled ? chalk.green(' (bundled)') : ''}`)
+    } catch (err) {
+      dlSpinner.fail(`Theme provision failed: ${err instanceof Error ? err.message : String(err)}`)
+      await rm(tmpDir, { recursive: true, force: true })
+      process.exit(1)
+    }
 
-  // Step 5: Scaffold Astro project files
-  const scaffoldSpinner = ora('Scaffolding Astro project…').start()
-  try {
-    await scaffoldAstroProject(
-      {
-        siteTitle: wpExport.siteTitle || 'My Blog',
-        siteDescription: `${wpExport.siteTitle} — блог`,
-        siteUrl: 'https://your-site.pages.dev',
-        authorName: '',
-        navItems,
-        hasCategories: wpExport.categories.length > 0,
-        hasTags: wpExport.tags.length > 0,
-      },
-      outputDir,
-    )
-    scaffoldSpinner.succeed('Astro project scaffolded')
-  } catch (err) {
-    scaffoldSpinner.fail(`Scaffold failed: ${err instanceof Error ? err.message : String(err)}`)
-    await rm(tmpDir, { recursive: true, force: true })
-    process.exit(1)
+    const injectSpinner = ora('Injecting WordPress content into theme…').start()
+    try {
+      const result = await injectContent(
+        join(tmpDir, 'content'),
+        outputDir,
+        adapter,
+        wpExport.siteTitle || '',
+      )
+      if (adapter.patchConfig) {
+        await adapter.patchConfig(outputDir, {
+          siteTitle: wpExport.siteTitle || 'My Blog',
+          siteDescription: `${wpExport.siteTitle} — blog`,
+          siteUrl: 'https://your-site.pages.dev',
+          authorName: '',
+        })
+      }
+      injectSpinner.succeed(
+        `Injected: ${chalk.green(String(result.postsInjected))} posts, ` +
+        `${chalk.green(String(result.pagesInjected))} pages, ` +
+        `${chalk.green(String(result.mediaFiles))} media files`
+      )
+    } catch (err) {
+      injectSpinner.fail(`Inject failed: ${err instanceof Error ? err.message : String(err)}`)
+      await rm(tmpDir, { recursive: true, force: true })
+      process.exit(1)
+    }
+  } else {
+    // ── Default scaffold mode ───────────────────────────────────────────────
+    // Step 4: Write taxonomy files
+    const taxSpinner = ora('Writing taxonomy entries…').start()
+    try {
+      await writeTaxonomy(wpExport.categories, wpExport.tags, outputDir)
+      taxSpinner.succeed(`Taxonomies: ${wpExport.categories.length} categories, ${wpExport.tags.length} tags`)
+    } catch (err) {
+      taxSpinner.warn(`Taxonomy write failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+
+    // Step 5: Scaffold Astro project files
+    const scaffoldSpinner = ora('Scaffolding Astro project…').start()
+    try {
+      await scaffoldAstroProject(
+        {
+          siteTitle: wpExport.siteTitle || 'My Blog',
+          siteDescription: `${wpExport.siteTitle} — блог`,
+          siteUrl: 'https://your-site.pages.dev',
+          authorName: '',
+          navItems,
+          allMenus,
+          hasCategories: wpExport.categories.length > 0,
+          hasTags: wpExport.tags.length > 0,
+        },
+        outputDir,
+      )
+      scaffoldSpinner.succeed('Astro project scaffolded')
+    } catch (err) {
+      scaffoldSpinner.fail(`Scaffold failed: ${err instanceof Error ? err.message : String(err)}`)
+      await rm(tmpDir, { recursive: true, force: true })
+      process.exit(1)
+    }
   }
 
   await rm(tmpDir, { recursive: true, force: true })
 
   console.log(chalk.bold.green('\n✅ Migration complete!\n'))
   console.log(`  Output   : ${chalk.cyan(outputDir)}`)
-  console.log(`  Articles : ${chalk.bold(String(transformResult.postsTransformed))}`)
-  console.log(`  Pages    : ${chalk.bold(String(transformResult.pagesTransformed))}`)
-  console.log(`  Media    : ${chalk.bold(String(transformResult.imagesCopied))} files`)
 
-  if (transformResult.imageFailed.length > 0) {
-    console.log(chalk.yellow(`\n⚠️  ${transformResult.imageFailed.length} image(s) could not be copied:`))
-    for (const msg of transformResult.imageFailed) {
-      console.log(chalk.gray(`    • ${msg}`))
+  if (adapter) {
+    console.log(`  Theme    : ${chalk.cyan(adapter.name)}`)
+    console.log(`  Posts    : ${chalk.bold(String(transformResult.postsTransformed))}`)
+    console.log(`  Media    : ${chalk.bold(String(transformResult.imagesCopied))} files`)
+    console.log()
+    console.log(chalk.bold('Next steps:'))
+    console.log(`  ${chalk.cyan(`cd ${options.output}`)}`)
+    console.log(`  ${chalk.cyan('npm install && npm run dev')}`)
+    console.log(`  → ${chalk.underline('http://localhost:4321')}`)
+  } else {
+    console.log(`  Articles : ${chalk.bold(String(transformResult.postsTransformed))}`)
+    console.log(`  Pages    : ${chalk.bold(String(transformResult.pagesTransformed))}`)
+    console.log(`  Media    : ${chalk.bold(String(transformResult.imagesCopied))} files`)
+
+    if (transformResult.imageFailed.length > 0) {
+      console.log(chalk.yellow(`\n⚠️  ${transformResult.imageFailed.length} image(s) could not be copied:`))
+      for (const msg of transformResult.imageFailed) {
+        console.log(chalk.gray(`    • ${msg}`))
+      }
     }
+    console.log()
+    console.log(chalk.bold('Next steps:'))
+    console.log(`  ${chalk.cyan(`cd ${options.output}`)}`)
+    console.log(`  ${chalk.cyan('npm start')}`)
+    console.log(`  → ${chalk.underline('http://localhost:4321')}`)
+    console.log(`  → ${chalk.underline('http://localhost:4321/keystatic')}  (CMS admin)`)
   }
-  console.log()
-  console.log(chalk.bold('Next steps:'))
-  console.log(`  ${chalk.cyan(`cd ${options.output}`)}`)
-  console.log(`  ${chalk.cyan('npm start')}`)
-  console.log(`  → ${chalk.underline('http://localhost:4321')}`)
-  console.log(`  → ${chalk.underline('http://localhost:4321/keystatic')}  (CMS admin)`)
 }
 
 async function resolveInput(input?: string): Promise<string | null> {

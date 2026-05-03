@@ -27,6 +27,7 @@ program
   .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (for local image serving)')
   .option('-o, --output <path>', 'Output directory', './output')
   .option('--repo <owner/repo>', 'GitHub repo for Keystatic config (e.g. my-org/my-blog)')
+  .option('-t, --theme <id>', 'Astro theme (default: astrowind | scaffold for Keystatic-only | rocket|brook|daisyui|mainline|small-biz)', 'astrowind')
   .action(async (options) => {
     const { runMigrate } = await import('./commands/migrate.js')
     await runMigrate(options)
