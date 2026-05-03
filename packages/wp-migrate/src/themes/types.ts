@@ -42,6 +42,8 @@ export interface ThemeAdapter {
   pagesDir?: string      // where pages go (if theme supports pages)
   mediaDir: string       // e.g. 'public/images' or 'public'
   fileExt: 'md' | 'mdx'
+  /** When true, each post is written as <contentDir>/<slug>/index.<ext> (directory entry, Keystatic-compatible) */
+  useDirectoryEntries?: boolean
   sampleContentDirs: string[]  // dirs to clear sample content from (delete .md/.mdx files)
   mapFrontmatter(fm: ArticleFM, siteAuthor: string): Record<string, unknown>
   mapPageFrontmatter?(fm: PageFM): Record<string, unknown>

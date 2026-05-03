@@ -118,9 +118,13 @@ export async function injectContent(
       const { data, content } = matter(raw)
 
       const themeFm = adapter.mapFrontmatter(data as Parameters<ThemeAdapter['mapFrontmatter']>[0], siteAuthor)
-      // Fix image paths: /media/foo.jpg → relative or keep as-is
-      // Most themes serve from public/, so /media/ becomes /media/ which works
-      const destFile = join(destContentDir, `${entry.name}.${adapter.fileExt}`)
+      let destFile: string
+      if (adapter.useDirectoryEntries) {
+        await mkdir(join(destContentDir, entry.name), { recursive: true })
+        destFile = join(destContentDir, entry.name, `index.${adapter.fileExt}`)
+      } else {
+        destFile = join(destContentDir, `${entry.name}.${adapter.fileExt}`)
+      }
       await writeFile(destFile, matter.stringify(content, themeFm), 'utf-8')
       postsInjected++
     }

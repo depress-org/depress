@@ -13,9 +13,9 @@ import type { ThemeAdapter, ArticleFM, PageFM, PatchConfigOpts, NavItem } from '
  *
  * Bundled in bundled-themes/astrowind/ — copied locally, never downloaded at runtime.
  *
- * Content structure:
- *   src/data/post/<slug>.md    blog posts  (flat files, Astro glob loader)
- *   public/images/blog/        media
+ * Content structure (Keystatic-compatible directory entries):
+ *   src/data/post/<slug>/index.mdx  blog posts
+ *   public/images/blog/             media
  */
 export const astrowindAdapter: ThemeAdapter = {
   id: 'astrowind',
@@ -28,7 +28,8 @@ export const astrowindAdapter: ThemeAdapter = {
 
   contentDir: 'src/data/post',
   mediaDir: 'public/images/blog',
-  fileExt: 'md',
+  fileExt: 'mdx',
+  useDirectoryEntries: true,
   sampleContentDirs: ['src/data/post'],
 
   mapFrontmatter(fm: ArticleFM, siteAuthor: string): Record<string, unknown> {
@@ -45,10 +46,6 @@ export const astrowindAdapter: ThemeAdapter = {
       tags: fm.tags ?? [],
       author: siteAuthor || 'Author',
       draft: false,
-      metadata: {
-        title: fm.seoTitle ?? fm.title ?? '',
-        description: fm.seoDescription ?? fm.excerpt ?? '',
-      },
     }
   },
 
@@ -68,25 +65,21 @@ export const astrowindAdapter: ThemeAdapter = {
     if (existsSync(configYamlPath)) {
       let yaml = await readFile(configYamlPath, 'utf-8')
 
-      // Replace site.name value
       yaml = yaml.replace(
         /(^|\n)(  name:\s*)(['"`]?)([^'"`\n]*)(\3)/,
         (_m, pre, key, q, _old, qEnd) =>
           `${pre}${key}${q || "'"}${opts.siteTitle}${qEnd || "'"}`,
       )
-      // Replace site.site (URL)
       if (opts.siteUrl) {
         yaml = yaml.replace(
           /(^|\n)(  site:\s*)(['"`])([^'"`\n]*)(\3)/,
           (_m, pre, key, q, _old, qEnd) => `${pre}${key}${q}${opts.siteUrl}${qEnd}`,
         )
       }
-      // Replace default metadata title
       yaml = yaml.replace(
         /(^\s*default:\s*)(['"`]?)([^'"`\n]*)(\2)/m,
         (_m, key, q, _old, qEnd) => `${key}${q || "'"}${opts.siteTitle}${qEnd || "'"}`,
       )
-      // Replace metadata description (first occurrence)
       yaml = yaml.replace(
         /(description:\s*)(['"`"])([\s\S]*?)(\2)/,
         (_m, key, q, _old, qEnd) => `${key}${q}${opts.siteDescription}${qEnd}`,
@@ -120,12 +113,11 @@ export const footerData = {
       await writeFile(navPath, navContent, 'utf-8')
     }
 
-    // 3. Patch astro.config.ts — set site URL + noop image service
-    // The noop service is needed because migrated content images live in public/
-    // and Astro's optimizer can't infer dimensions for public/ files.
+    // 3. Patch astro.config.ts — hybrid output + noop image service + Keystatic
     const astroCfgPath = join(outputDir, 'astro.config.ts')
     if (existsSync(astroCfgPath)) {
       let cfg = await readFile(astroCfgPath, 'utf-8')
+
       if (opts.siteUrl) {
         if (/site:\s*['"`]/.test(cfg)) {
           cfg = cfg.replace(/(site:\s*)(['"`])[^'"`]*\2/, `$1$2${opts.siteUrl}$2`)
@@ -133,10 +125,10 @@ export const footerData = {
           cfg = cfg.replace('export default defineConfig({', `export default defineConfig({\n  site: '${opts.siteUrl}',`)
         }
       }
+
       // Replace existing image: block or inject before integrations:
       if (!cfg.includes('noop')) {
         if (/^\s*image\s*:/m.test(cfg)) {
-          // Replace the existing image: { ... } block (handles multi-line blocks)
           cfg = cfg.replace(/\bimage\s*:\s*\{[^}]*(?:\{[^}]*\}[^}]*)?\},?\s*/s, `image: { service: { entrypoint: 'astro/assets/services/noop' } },\n\n  `)
         } else {
           cfg = cfg.replace(
@@ -145,8 +137,79 @@ export const footerData = {
           )
         }
       }
+
+      // Add Keystatic: switch to hybrid output, add node adapter + react + keystatic
+      if (!cfg.includes('keystatic')) {
+        cfg = cfg.replace(
+          /import \{ defineConfig \} from 'astro\/config';/,
+          `import { defineConfig } from 'astro/config';\nimport node from '@astrojs/node';\nimport react from '@astrojs/react';\nimport keystatic from '@keystatic/astro';`,
+        )
+        // Keep output: 'static' (Astro 5 default, supports per-page prerender=false)
+        // Just inject the node adapter before integrations
+        cfg = cfg.replace(
+          /export default defineConfig\(\{/,
+          `export default defineConfig({\n  adapter: node({ mode: 'standalone' }),`,
+        )
+        cfg = cfg.replace(
+          /(\bintegrations:\s*\[)/,
+          `$1\n    react(),\n    keystatic(),`,
+        )
+      }
+
       await writeFile(astroCfgPath, cfg, 'utf-8')
     }
+
+    // 4. Add Keystatic deps to package.json
+    const pkgPath = join(outputDir, 'package.json')
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'))
+      if (!pkg.dependencies?.['@keystatic/core']) {
+        pkg.dependencies = {
+          ...pkg.dependencies,
+          '@keystatic/core': '^0.5.0',
+          '@keystatic/astro': '^5.0.0',
+          '@astrojs/react': '^3.0.0',
+          '@astrojs/node': '^9.0.0',
+          'react': '^18.3.0',
+          'react-dom': '^18.3.0',
+        }
+        await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8')
+      }
+    }
+
+    // 5. Write keystatic.config.ts
+    const keystaticcfgPath = join(outputDir, 'keystatic.config.ts')
+    if (!existsSync(keystaticcfgPath)) {
+      const keystaticcfg = `import { config, fields, collection } from '@keystatic/core'
+
+export default config({
+  storage: {
+    kind: 'local',
+  },
+
+  collections: {
+    posts: collection({
+      label: 'Blog Posts',
+      slugField: 'title',
+      path: 'src/data/post/*/',
+      format: { contentField: 'content' },
+      schema: {
+        title: fields.slug({ name: { label: 'Title' } }),
+        publishDate: fields.datetime({ label: 'Publish Date', defaultValue: { kind: 'now' } }),
+        excerpt: fields.text({ label: 'Excerpt', multiline: true }),
+        category: fields.text({ label: 'Category' }),
+        tags: fields.array(fields.text({ label: 'Tag' }), { label: 'Tags', itemLabel: (props) => props.fields.value.value }),
+        author: fields.text({ label: 'Author' }),
+        draft: fields.checkbox({ label: 'Draft', defaultValue: false }),
+        content: fields.mdx({ label: 'Content' }),
+      },
+    }),
+  },
+})
+`
+      await writeFile(keystaticcfgPath, keystaticcfg, 'utf-8')
+    }
+
   },
 }
 

@@ -316,6 +316,24 @@ export async function runMigrate(options: MigrateOptions) {
         `${chalk.green(String(result.pagesInjected))} pages, ` +
         `${chalk.green(String(result.mediaFiles))} media files`
       )
+
+      // Keystatic "local" storage requires a git repo — init one if needed
+      const gitDir = join(outputDir, '.git')
+      if (!existsSync(gitDir)) {
+        const gitSpinner = ora('Initialising git repo (required for Keystatic CMS)…').start()
+        try {
+          await new Promise<void>((res, rej) => {
+            const child = spawn('sh', ['-c',
+              `cd "${outputDir}" && git init -q && git add -A && git commit -q -m "Initial migration by depress"`,
+            ], { stdio: 'pipe' })
+            child.on('close', (code) => code === 0 ? res() : rej(new Error(`git init exited ${code}`)))
+            child.on('error', rej)
+          })
+          gitSpinner.succeed('Git repo initialised')
+        } catch {
+          gitSpinner.warn('Could not init git repo — run "git init && git add -A" inside the output folder for Keystatic to work')
+        }
+      }
     } catch (err) {
       injectSpinner.fail(`Inject failed: ${err instanceof Error ? err.message : String(err)}`)
       await rm(tmpDir, { recursive: true, force: true })
