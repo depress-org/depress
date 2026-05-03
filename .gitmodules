@@ -1,0 +1,4 @@
+[submodule "packages/wp-migrate/bundled-themes/rocket"]
+	path = packages/wp-migrate/bundled-themes/rocket
+	url = https://github.com/hansmartens68/Astro-Rocket.git
+	branch = main
