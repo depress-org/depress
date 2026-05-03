@@ -216,8 +216,10 @@ export async function runMigrate(options: MigrateOptions) {
     process.exit(1)
   }
 
-  const navItems = parseNavFromXml(xmlContent!, wpExport.posts, wpExport.categories, wpExport.siteUrl)
-  console.log(chalk.gray(`  Navigation: ${navItems.map((n: { label: string }) => n.label).join(' · ')}`))
+  const allMenus = parseNavFromXml(xmlContent!, wpExport.posts, wpExport.categories, wpExport.siteUrl)
+  // Primary menu: prefer 'main', then 'primary', then first available
+  const navItems = allMenus['main'] ?? allMenus['primary'] ?? Object.values(allMenus)[0] ?? []
+  console.log(chalk.gray(`  Navigation: ${Object.entries(allMenus).map(([name, items]) => `${name}(${items.length})`).join(', ')}`))
 
   // Step 2: Run wp2md stage 1
   const tmpDir = await mkdtemp(join(tmpdir(), 'depress-migrate-'))
@@ -269,6 +271,7 @@ export async function runMigrate(options: MigrateOptions) {
         siteUrl: 'https://your-site.pages.dev',
         authorName: '',
         navItems,
+        allMenus,
         hasCategories: wpExport.categories.length > 0,
         hasTags: wpExport.tags.length > 0,
       },

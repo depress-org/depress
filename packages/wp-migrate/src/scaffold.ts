@@ -2,12 +2,16 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import type { NavItem } from '@depress-org/core'
 
+
 export interface ScaffoldOptions {
   siteTitle: string
   siteDescription: string
   siteUrl: string
   authorName: string
   navItems: NavItem[]
+  allMenus?: Record<string, NavItem[]>
+  homepageType?: 'latest_posts' | 'page' | 'category'
+  homepageRef?: string
   hasCategories: boolean
   hasTags: boolean
 }
@@ -172,8 +176,11 @@ export const collections = { ${exportParts.join(', ')} }
 `
 }
 
-function genNavigationJson(navItems: NavItem[]): string {
-  return JSON.stringify(navItems, null, 2)
+function genNavigationJson(navItems: NavItem[], allMenus?: Record<string, NavItem[]>): string {
+  if (allMenus && Object.keys(allMenus).length > 0) {
+    return JSON.stringify(allMenus, null, 2)
+  }
+  return JSON.stringify({ primary: navItems }, null, 2)
 }
 
 function genBaseLayout(siteTitle: string): string {
@@ -213,36 +220,108 @@ const { title, description = '' } = Astro.props
 
 function genHeaderAstro(siteTitle: string): string {
   return `---
-import nav from '../../data/navigation.json'
+import navData from '../../data/navigation.json'
 
+type NavItem = { label: string; href: string; children?: NavItem[] }
+const navItems: NavItem[] = (navData as any).primary ?? Object.values(navData as any)[0] ?? []
 const current = Astro.url.pathname
 ---
 
-<header class="border-b border-gray-200 bg-white sticky top-0 z-10">
+<header class="border-b border-gray-200 bg-white sticky top-0 z-50">
   <nav class="container mx-auto px-4 max-w-5xl flex items-center justify-between h-14">
     <a href="/" class="text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors">
       ${siteTitle}
     </a>
-    <ul class="flex gap-5 flex-wrap">
-      {
-        nav.map((item: { label: string; href: string }) => (
-          <li>
-            <a
-              href={item.href}
-              class={\`text-sm transition-colors \${
-                current === item.href || (item.href !== '/' && current.startsWith(item.href))
-                  ? 'text-gray-900 font-medium'
-                  : 'text-gray-500 hover:text-gray-900'
-              }\`}
-            >
-              {item.label}
-            </a>
-          </li>
-        ))
-      }
+
+    <!-- Desktop nav -->
+    <ul class="hidden md:flex gap-1 items-center">
+      {navItems.map((item: NavItem) => (
+        <li class="relative group">
+          <a
+            href={item.href}
+            class={\`px-3 py-2 rounded-md text-sm transition-colors \${
+              current === item.href || (item.href !== '/' && current.startsWith(item.href))
+                ? 'text-gray-900 font-medium bg-gray-100'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+            }\`}
+          >
+            {item.label}{item.children && item.children.length > 0 ? ' ▾' : ''}
+          </a>
+          {item.children && item.children.length > 0 && (
+            <ul class="absolute left-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 py-1">
+              {item.children.map((child: NavItem) => (
+                <li>
+                  <a
+                    href={child.href}
+                    class={\`block px-4 py-2 text-sm hover:bg-gray-50 hover:text-gray-900 \${
+                      current === child.href || (child.href !== '/' && current.startsWith(child.href))
+                        ? 'text-gray-900 font-medium'
+                        : 'text-gray-700'
+                    }\`}
+                  >
+                    {child.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
     </ul>
+
+    <!-- Mobile hamburger -->
+    <button id="menu-toggle" class="md:hidden p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors" aria-label="Toggle menu">
+      ☰
+    </button>
   </nav>
+
+  <!-- Mobile nav -->
+  <div id="mobile-menu" class="hidden md:hidden border-t border-gray-100 bg-white">
+    <ul class="px-4 py-3 space-y-1">
+      {navItems.map((item: NavItem) => (
+        <li>
+          <a
+            href={item.href}
+            class={\`block px-3 py-2 rounded-md text-sm transition-colors \${
+              current === item.href || (item.href !== '/' && current.startsWith(item.href))
+                ? 'text-gray-900 font-medium bg-gray-100'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }\`}
+          >
+            {item.label}
+          </a>
+          {item.children && item.children.length > 0 && (
+            <ul class="mt-1 ml-3 space-y-1">
+              {item.children.map((child: NavItem) => (
+                <li>
+                  <a
+                    href={child.href}
+                    class={\`block px-3 py-2 rounded-md text-sm transition-colors \${
+                      current === child.href || (child.href !== '/' && current.startsWith(child.href))
+                        ? 'text-gray-900 font-medium bg-gray-100'
+                        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                    }\`}
+                  >
+                    {child.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  </div>
 </header>
+
+<script>
+  const btn = document.getElementById('menu-toggle')
+  const menu = document.getElementById('mobile-menu')
+  btn?.addEventListener('click', () => {
+    const isHidden = menu?.classList.toggle('hidden')
+    if (btn) btn.textContent = isHidden === false ? '✕' : '☰'
+  })
+</script>
 `
 }
 
@@ -314,36 +393,61 @@ const formattedDate = publishedAt
 
 function genIndexPage(siteTitle: string, siteDescription: string): string {
   return `---
+import { getCollection, getEntry } from 'astro:content'
+import { createReader } from '@keystatic/core/reader'
+import keystaticConfig from '../../keystatic.config'
 import BaseLayout from '../layouts/BaseLayout.astro'
 import ArticleCard from '../components/ui/ArticleCard.astro'
-import { getCollection } from 'astro:content'
 
-const articles = (await getCollection('articles'))
-  .filter((a) => !a.id.startsWith('_drafts/'))
-  .sort(
-    (a, b) =>
-      new Date(b.data.publishedAt ?? 0).getTime() - new Date(a.data.publishedAt ?? 0).getTime(),
-  )
-  .slice(0, 6)
+const reader = createReader(process.cwd(), keystaticConfig)
+const siteConfigData = await reader.singletons.siteConfig.read()
+
+const homepageType = siteConfigData?.homepageType ?? 'latest_posts'
+const homepageRef = siteConfigData?.homepageRef ?? ''
+const pageSiteTitle = siteConfigData?.siteTitle ?? '${siteTitle}'
+const pageSiteDescription = siteConfigData?.siteDescription ?? '${siteDescription}'
+
+let pageEntry: any = null
+let articles: any[] = []
+
+if (homepageType === 'page' && homepageRef) {
+  pageEntry = await getEntry('pages', homepageRef).catch(() => null)
+} else {
+  const allArticles = await getCollection('articles', (a: any) => !a.id.startsWith('_drafts/'))
+  if (homepageType === 'category' && homepageRef) {
+    articles = allArticles
+      .filter((a: any) => a.data.category === homepageRef)
+      .sort((a: any, b: any) => new Date(b.data.publishedAt ?? 0).getTime() - new Date(a.data.publishedAt ?? 0).getTime())
+      .slice(0, 9)
+  } else {
+    articles = allArticles
+      .sort((a: any, b: any) => new Date(b.data.publishedAt ?? 0).getTime() - new Date(a.data.publishedAt ?? 0).getTime())
+      .slice(0, 9)
+  }
+}
 ---
 
-<BaseLayout title="Главная" description="${siteDescription}">
-  <section class="mb-12">
-    <h1 class="text-4xl font-bold text-gray-900 mb-4 font-serif">${siteTitle}</h1>
-    <p class="text-lg text-gray-600 leading-relaxed">${siteDescription}</p>
-  </section>
-
-  {
-    articles.length > 0 ? (
-      <section>
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-semibold text-gray-900">Последние статьи</h2>
-          <a href="/blog" class="text-sm text-blue-600 hover:text-blue-800 transition-colors">
-            Все статьи →
-          </a>
-        </div>
-        <div class="grid gap-4 sm:grid-cols-2">
-          {articles.map((article) => (
+<BaseLayout title={pageSiteTitle} description={pageSiteDescription}>
+  {pageEntry ? (
+    <div class="container mx-auto px-4 max-w-3xl py-16">
+      <h1 class="text-4xl font-bold text-gray-900 font-serif mb-8">{pageEntry.data.title}</h1>
+      <div class="prose prose-gray max-w-none">
+        {/* Markdoc render */}
+      </div>
+    </div>
+  ) : (
+    <section class="container mx-auto px-4 max-w-5xl py-16">
+      <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold text-gray-900 font-serif mb-4">{pageSiteTitle}</h1>
+        <p class="text-lg text-gray-600">{pageSiteDescription}</p>
+      </div>
+      <div class="flex items-center justify-between mb-8">
+        <h2 class="text-2xl font-semibold text-gray-900 font-serif">Последние статьи</h2>
+        <a href="/blog" class="text-sm text-blue-600 hover:text-blue-700 font-medium">Все статьи →</a>
+      </div>
+      {articles.length > 0 ? (
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {articles.map((article: any) => (
             <ArticleCard
               title={article.data.title}
               slug={article.slug}
@@ -354,11 +458,11 @@ const articles = (await getCollection('articles'))
             />
           ))}
         </div>
-      </section>
-    ) : (
-      <p class="text-gray-400 text-center py-20">Статьи появятся здесь.</p>
-    )
-  }
+      ) : (
+        <p class="text-gray-400 text-center py-20">Статьи появятся здесь.</p>
+      )}
+    </section>
+  )}
 </BaseLayout>
 `
 }
@@ -748,6 +852,16 @@ ${categoriesCollection}${tagsCollection}
         siteDescription: fields.text({ label: 'Site Description', multiline: true }),
         authorName: fields.text({ label: 'Author Name' }),
         authorBio: fields.text({ label: 'Author Bio', multiline: true }),
+        homepageType: fields.select({
+          label: 'Homepage shows',
+          options: [
+            { label: 'Latest posts', value: 'latest_posts' },
+            { label: 'A specific page', value: 'page' },
+            { label: 'Posts from a category', value: 'category' },
+          ],
+          defaultValue: 'latest_posts',
+        }),
+        homepageRef: fields.text({ label: 'Page or category slug (when not using latest posts)' }),
         navItems: fields.array(
           fields.object({
             label: fields.text({ label: 'Menu Item Label' }),
@@ -767,6 +881,8 @@ function genSiteConfigYaml(opts: {
   siteDescription: string
   authorName: string
   navItems: NavItem[]
+  homepageType?: string
+  homepageRef?: string
 }): string {
   const navYaml = opts.navItems
     .map(
@@ -775,10 +891,15 @@ function genSiteConfigYaml(opts: {
     )
     .join('\n')
 
+  const homepageType = opts.homepageType ?? 'latest_posts'
+  const homepageRef = opts.homepageRef ?? ''
+
   return `siteTitle: ${JSON.stringify(opts.siteTitle)}
 siteDescription: ${JSON.stringify(opts.siteDescription)}
 authorName: ${JSON.stringify(opts.authorName)}
 authorBio: ""
+homepageType: ${JSON.stringify(homepageType)}
+homepageRef: ${JSON.stringify(homepageRef)}
 navItems:
 ${navYaml}
 `
@@ -820,7 +941,7 @@ export async function scaffoldAstroProject(
   opts: ScaffoldOptions,
   outputDir: string,
 ): Promise<void> {
-  const { siteTitle, siteDescription, siteUrl, authorName, navItems, hasCategories, hasTags } = opts
+  const { siteTitle, siteDescription, siteUrl, authorName, navItems, allMenus, homepageType, homepageRef, hasCategories, hasTags } = opts
 
   const writes: Array<[string, string]> = [
     // Root config files
@@ -840,9 +961,9 @@ export async function scaffoldAstroProject(
     // src/
     ['src/env.d.ts', genEnvDts()],
     ['src/styles/global.css', genGlobalCss()],
-    ['src/data/navigation.json', genNavigationJson(navItems)],
+    ['src/data/navigation.json', genNavigationJson(navItems, allMenus)],
     ['src/content/config.ts', genContentConfig(hasCategories, hasTags)],
-    ['site-config.yaml', genSiteConfigYaml({ siteTitle, siteDescription, authorName, navItems })],
+    ['site-config.yaml', genSiteConfigYaml({ siteTitle, siteDescription, authorName, navItems, homepageType, homepageRef })],
 
     // Layouts
     ['src/layouts/BaseLayout.astro', genBaseLayout(siteTitle)],
