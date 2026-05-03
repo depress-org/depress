@@ -93,11 +93,21 @@ function genTailwindConfig(): string {
   return `/** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/**/*.{astro,html,js,jsx,ts,tsx}'],
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       fontFamily: {
         sans: ['system-ui', 'sans-serif'],
         serif: ['Georgia', 'serif'],
+      },
+      colors: {
+        bg: 'var(--color-bg)',
+        surface: 'var(--color-surface)',
+        border: 'var(--color-border)',
+        heading: 'var(--color-heading)',
+        body: 'var(--color-body)',
+        muted: 'var(--color-muted)',
+        link: 'var(--color-link)',
       },
     },
   },
@@ -204,10 +214,16 @@ const { title, description = '' } = Astro.props
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
+    <script is:inline>
+      ;(function () {
+        var t = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        document.documentElement.setAttribute('data-theme', t)
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title} — ${siteTitle}</title>
   </head>
-  <body class="min-h-screen flex flex-col bg-white text-gray-900 font-sans">
+  <body class="min-h-screen flex flex-col bg-bg text-body font-sans">
     <Header />
     <main class="flex-1 container mx-auto px-4 py-10 max-w-3xl w-full">
       <slot />
@@ -268,6 +284,19 @@ function isActive(href: string) {
       })}
     </ul>
 
+    <!-- Theme toggle -->
+    <button id="theme-toggle" class="theme-toggle" aria-label="Переключить тему">
+      <!-- Sun icon — shown in dark mode (click to go light) -->
+      <svg class="theme-icon theme-icon-sun" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <!-- Moon icon — shown in light mode (click to go dark) -->
+      <svg class="theme-icon theme-icon-moon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M17 10.5A7 7 0 1 1 9.5 3c-.2 1.2 0 2.8.8 4 .8 1.2 2.2 2.3 3.7 2.8 1.5.5 2.8.4 3 .7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
     <!-- Mobile hamburger -->
     <button id="menu-toggle" class="nav-burger" aria-label="Открыть меню" aria-expanded="false">
       <span class="nav-burger-bar"></span>
@@ -309,11 +338,11 @@ function isActive(href: string) {
     position: sticky;
     top: 0;
     z-index: 50;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-bottom: 1px solid #f0f0f0;
-    box-shadow: 0 1px 3px 0 rgba(0,0,0,.04);
+    background: var(--nav-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
   }
 
   .nav-inner {
@@ -332,12 +361,12 @@ function isActive(href: string) {
     font-size: 1.125rem;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: #111;
+    color: var(--color-heading);
     text-decoration: none;
     white-space: nowrap;
     flex-shrink: 0;
   }
-  .nav-logo:hover { color: #555; }
+  .nav-logo:hover { color: var(--color-muted); }
 
   /* Desktop list */
   .nav-list {
@@ -358,37 +387,30 @@ function isActive(href: string) {
 
   .nav-link {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.25rem;
     padding: 0.375rem 0.75rem;
     border-radius: 0.5rem;
     font-size: 0.875rem;
     font-weight: 450;
-    color: #555;
+    color: var(--color-muted);
     text-decoration: none;
-    white-space: nowrap;
     transition: color 0.15s, background 0.15s;
+    line-height: 1.35;
   }
-  .nav-link:hover {
-    color: #111;
-    background: #f4f4f5;
-  }
-  .nav-link--active {
-    color: #111;
-    font-weight: 600;
-    background: #f4f4f5;
-  }
+  .nav-link:hover { color: var(--color-heading); background: var(--color-surface); }
+  .nav-link--active { color: var(--color-heading); font-weight: 600; background: var(--color-surface); }
 
   .nav-link-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 12rem;
+    display: block;
+    max-width: 14rem;
   }
 
   .nav-chevron {
     width: 0.7rem;
     height: 0.7rem;
     flex-shrink: 0;
+    margin-top: 0.2rem;
     opacity: 0.5;
     transition: transform 0.2s, opacity 0.2s;
   }
@@ -404,10 +426,10 @@ function isActive(href: string) {
     left: 50%;
     transform: translateX(-50%) translateY(-4px);
     min-width: 16rem;
-    background: #fff;
-    border: 1px solid #e8e8e8;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
     border-radius: 0.75rem;
-    box-shadow: 0 8px 24px -4px rgba(0,0,0,.12), 0 2px 8px -2px rgba(0,0,0,.06);
+    box-shadow: var(--shadow-dropdown);
     padding: 0.375rem;
     opacity: 0;
     visibility: hidden;
@@ -433,19 +455,12 @@ function isActive(href: string) {
     border-radius: 0.5rem;
     font-size: 0.8125rem;
     line-height: 1.5;
-    color: #444;
+    color: var(--color-body);
     text-decoration: none;
     transition: background 0.12s, color 0.12s;
   }
-  .nav-dropdown-link:hover {
-    background: #f4f4f5;
-    color: #111;
-  }
-  .nav-dropdown-link--active {
-    background: #f0f0f0;
-    color: #111;
-    font-weight: 600;
-  }
+  .nav-dropdown-link:hover { background: var(--color-surface); color: var(--color-heading); }
+  .nav-dropdown-link--active { background: var(--color-surface); color: var(--color-heading); font-weight: 600; }
 
   /* Hamburger */
   .nav-burger {
@@ -462,14 +477,14 @@ function isActive(href: string) {
     cursor: pointer;
     transition: background 0.15s;
   }
-  .nav-burger:hover { background: #f4f4f5; }
+  .nav-burger:hover { background: var(--color-surface); }
   @media (min-width: 768px) { .nav-burger { display: none; } }
 
   .nav-burger-bar {
     display: block;
     width: 100%;
     height: 1.5px;
-    background: #555;
+    background: var(--color-muted);
     border-radius: 1px;
     transition: transform 0.2s, opacity 0.2s;
   }
@@ -480,8 +495,8 @@ function isActive(href: string) {
   /* Mobile drawer */
   .nav-mobile {
     display: none;
-    border-top: 1px solid #f0f0f0;
-    background: #fff;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg);
   }
   .nav-mobile.is-open { display: block; }
   @media (min-width: 768px) { .nav-mobile { display: none !important; } }
@@ -501,18 +516,18 @@ function isActive(href: string) {
     border-radius: 0.5rem;
     font-size: 0.9375rem;
     font-weight: 500;
-    color: #333;
+    color: var(--color-body);
     text-decoration: none;
     transition: background 0.12s;
   }
-  .nav-mobile-link:hover { background: #f4f4f5; }
-  .nav-mobile-link--active { background: #f0f0f0; color: #111; font-weight: 600; }
+  .nav-mobile-link:hover { background: var(--color-surface); }
+  .nav-mobile-link--active { background: var(--color-surface); color: var(--color-heading); font-weight: 600; }
 
   .nav-mobile-sub {
     list-style: none;
     margin: 0.25rem 0 0.5rem 1rem;
     padding: 0;
-    border-left: 2px solid #e8e8e8;
+    border-left: 2px solid var(--color-border);
     padding-left: 0.75rem;
     display: flex;
     flex-direction: column;
@@ -524,24 +539,60 @@ function isActive(href: string) {
     padding: 0.375rem 0.5rem;
     border-radius: 0.375rem;
     font-size: 0.8125rem;
-    color: #555;
+    color: var(--color-muted);
     text-decoration: none;
     transition: background 0.12s, color 0.12s;
   }
-  .nav-mobile-sub-link:hover { background: #f4f4f5; color: #111; }
-  .nav-mobile-sub-link--active { color: #111; font-weight: 600; }
+  .nav-mobile-sub-link:hover { background: var(--color-surface); color: var(--color-heading); }
+  .nav-mobile-sub-link--active { color: var(--color-heading); font-weight: 600; }
+
+  /* Theme toggle */
+  .theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-muted);
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .theme-toggle:hover { background: var(--color-surface); color: var(--color-heading); }
+
+  .theme-icon { width: 1.125rem; height: 1.125rem; }
+
+  /* Light mode: show moon (to switch to dark) */
+  .theme-icon-sun { display: none; }
+  .theme-icon-moon { display: block; }
+
+  /* Dark mode: show sun (to switch to light) */
+  :global([data-theme="dark"]) .theme-icon-sun { display: block; }
+  :global([data-theme="dark"]) .theme-icon-moon { display: none; }
 </style>
 
 <script>
+  // Mobile menu
   const btn = document.getElementById('menu-toggle')
   const menu = document.getElementById('mobile-menu')
-
   btn?.addEventListener('click', () => {
     const open = menu?.classList.toggle('is-open')
     btn.classList.toggle('is-open', open)
     btn.setAttribute('aria-expanded', String(open))
     menu?.setAttribute('aria-hidden', String(!open))
     btn.setAttribute('aria-label', open ? 'Закрыть меню' : 'Открыть меню')
+  })
+
+  // Theme toggle
+  const themeBtn = document.getElementById('theme-toggle')
+  themeBtn?.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'light'
+    const next = current === 'dark' ? 'light' : 'dark'
+    document.documentElement.setAttribute('data-theme', next)
+    localStorage.setItem('theme', next)
   })
 </script>
 `
@@ -552,13 +603,13 @@ function genFooterAstro(siteTitle: string): string {
 const year = new Date().getFullYear()
 ---
 
-<footer class="border-t border-gray-100 bg-gray-50 mt-auto">
-  <div class="container mx-auto px-4 max-w-3xl py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
+<footer class="border-t border-border bg-surface mt-auto">
+  <div class="container mx-auto px-4 max-w-3xl py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted">
     <p>&copy; {year} ${siteTitle}. All rights reserved.</p>
     <p>
-      Built with <a href="https://astro.build" class="hover:text-gray-600 transition-colors">Astro</a>
+      Built with <a href="https://astro.build" class="hover:text-body transition-colors">Astro</a>
       {' '}+{' '}
-      <a href="https://keystatic.com" class="hover:text-gray-600 transition-colors">Keystatic</a>
+      <a href="https://keystatic.com" class="hover:text-body transition-colors">Keystatic</a>
     </p>
   </div>
 </footer>
@@ -587,25 +638,25 @@ const formattedDate = publishedAt
   : null
 ---
 
-<article class="group border border-gray-200 rounded-xl overflow-hidden hover:border-gray-300 hover:shadow-sm transition-all">
+<article class="group border border-border rounded-xl overflow-hidden bg-surface hover:shadow-[var(--shadow-card)] transition-all">
   <a href={\`/blog/\${slug}\`} class="block">
     {coverImage && (
-      <div class="aspect-video overflow-hidden bg-gray-100">
+      <div class="aspect-video overflow-hidden bg-surface">
         <img src={coverImage} alt={title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
       </div>
     )}
     <div class="p-5">
       {category && (
-        <span class="text-xs font-medium text-blue-600 uppercase tracking-wide mb-2 block">
+        <span class="text-xs font-medium text-link uppercase tracking-wide mb-2 block">
           {category}
         </span>
       )}
-      <h2 class="text-base font-semibold text-gray-900 mb-2 group-hover:text-blue-700 transition-colors leading-snug">
+      <h2 class="text-base font-semibold text-heading mb-2 group-hover:text-link transition-colors leading-snug">
         {title}
       </h2>
-      {excerpt && <p class="text-gray-500 text-sm leading-relaxed line-clamp-3">{excerpt}</p>}
+      {excerpt && <p class="text-muted text-sm leading-relaxed line-clamp-3">{excerpt}</p>}
       {formattedDate && (
-        <time class="text-xs text-gray-400 mt-3 block">{formattedDate}</time>
+        <time class="text-xs text-muted mt-3 block">{formattedDate}</time>
       )}
     </div>
   </a>
@@ -652,7 +703,7 @@ if (homepageType === 'page' && homepageRef) {
 <BaseLayout title={pageSiteTitle} description={pageSiteDescription}>
   {pageEntry ? (
     <div class="container mx-auto px-4 max-w-3xl py-16">
-      <h1 class="text-4xl font-bold text-gray-900 font-serif mb-8">{pageEntry.data.title}</h1>
+      <h1 class="text-4xl font-bold text-heading font-serif mb-8">{pageEntry.data.title}</h1>
       <div class="prose prose-gray max-w-none">
         {/* Markdoc render */}
       </div>
@@ -660,12 +711,12 @@ if (homepageType === 'page' && homepageRef) {
   ) : (
     <section class="container mx-auto px-4 max-w-5xl py-16">
       <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-gray-900 font-serif mb-4">{pageSiteTitle}</h1>
-        <p class="text-lg text-gray-600">{pageSiteDescription}</p>
+        <h1 class="text-4xl font-bold text-heading font-serif mb-4">{pageSiteTitle}</h1>
+        <p class="text-lg text-muted">{pageSiteDescription}</p>
       </div>
       <div class="flex items-center justify-between mb-8">
-        <h2 class="text-2xl font-semibold text-gray-900 font-serif">Последние статьи</h2>
-        <a href="/blog" class="text-sm text-blue-600 hover:text-blue-700 font-medium">Все статьи →</a>
+        <h2 class="text-2xl font-semibold text-heading font-serif">Последние статьи</h2>
+        <a href="/blog" class="text-sm text-link hover:text-link font-medium">Все статьи →</a>
       </div>
       {articles.length > 0 ? (
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -704,7 +755,7 @@ const articles = (await getCollection('articles'))
 ---
 
 <BaseLayout title="Все статьи" description="Все статьи блога.">
-  <h1 class="text-3xl font-bold text-gray-900 mb-8 font-serif">Все статьи</h1>
+  <h1 class="text-3xl font-bold text-heading mb-8 font-serif">Все статьи</h1>
 
   {
     articles.length > 0 ? (
@@ -762,17 +813,17 @@ const formattedDate = article.data.publishedAt
   <article>
     <header class="mb-10">
       {article.data.category && (
-        <span class="text-xs font-medium text-blue-600 uppercase tracking-wide mb-3 block">
+        <span class="text-xs font-medium text-link uppercase tracking-wide mb-3 block">
           {article.data.category}
         </span>
       )}
-      <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 font-serif leading-tight mb-4">
+      <h1 class="text-3xl sm:text-4xl font-bold text-heading font-serif leading-tight mb-4">
         {article.data.title}
       </h1>
       {article.data.excerpt && (
-        <p class="text-lg text-gray-500 leading-relaxed">{article.data.excerpt}</p>
+        <p class="text-lg text-muted leading-relaxed">{article.data.excerpt}</p>
       )}
-      {formattedDate && <time class="text-sm text-gray-400 mt-3 block">{formattedDate}</time>}
+      {formattedDate && <time class="text-sm text-muted mt-3 block">{formattedDate}</time>}
       {article.data.coverImage && (
         <div class="mt-6 rounded-xl overflow-hidden">
           <img src={article.data.coverImage} alt={article.data.title} class="w-full" />
@@ -801,12 +852,14 @@ const formattedDate = article.data.publishedAt
 </BaseLayout>
 
 <style is:global>
-  .prose h1, .prose h2, .prose h3 { font-family: Georgia, serif; color: #111827; }
-  .prose p { line-height: 1.8; color: #374151; }
-  .prose a { color: #2563eb; }
-  .prose a:hover { color: #1d4ed8; }
+  .prose h1, .prose h2, .prose h3 { font-family: Georgia, serif; color: var(--color-heading); }
+  .prose p { line-height: 1.8; color: var(--color-body); }
+  .prose a { color: var(--color-link); }
+  .prose a:hover { color: var(--color-link-hover); }
   .prose img { border-radius: 0.5rem; max-width: 100%; height: auto; }
-  .prose blockquote { border-left-color: #e5e7eb; color: #6b7280; }
+  .prose blockquote { border-left-color: var(--color-border); color: var(--color-muted); }
+  .prose code { background: var(--color-surface); padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-size: 0.875em; }
+  .prose pre { background: var(--color-surface); border: 1px solid var(--color-border); }
 </style>
 `
 }
@@ -830,7 +883,7 @@ const { Content } = await page.render()
 
 <BaseLayout title={page.data.title} description={page.data.seoDescription ?? ''}>
   <article>
-    <h1 class="text-3xl font-bold text-gray-900 font-serif mb-8">{page.data.title}</h1>
+    <h1 class="text-3xl font-bold text-heading font-serif mb-8">{page.data.title}</h1>
     <div class="prose prose-gray max-w-none">
       <Content />
     </div>
@@ -838,11 +891,14 @@ const { Content } = await page.render()
 </BaseLayout>
 
 <style is:global>
-  .prose h1, .prose h2, .prose h3 { font-family: Georgia, serif; color: #111827; }
-  .prose p { line-height: 1.8; color: #374151; }
-  .prose a { color: #2563eb; }
-  .prose a:hover { color: #1d4ed8; }
+  .prose h1, .prose h2, .prose h3 { font-family: Georgia, serif; color: var(--color-heading); }
+  .prose p { line-height: 1.8; color: var(--color-body); }
+  .prose a { color: var(--color-link); }
+  .prose a:hover { color: var(--color-link-hover); }
   .prose img { border-radius: 0.5rem; max-width: 100%; height: auto; }
+  .prose blockquote { border-left-color: var(--color-border); color: var(--color-muted); }
+  .prose code { background: var(--color-surface); padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-size: 0.875em; }
+  .prose pre { background: var(--color-surface); border: 1px solid var(--color-border); }
 </style>
 `
 }
@@ -872,7 +928,7 @@ const articles = (await getCollection('articles'))
   <div class="mb-8">
     <a href="/blog" class="text-sm text-blue-600 hover:text-blue-800 transition-colors">← All articles</a>
   </div>
-  <h1 class="text-3xl font-bold text-gray-900 font-serif mb-8">{category}</h1>
+  <h1 class="text-3xl font-bold text-heading font-serif mb-8">{category}</h1>
 
   {
     articles.length > 0 ? (
@@ -907,6 +963,43 @@ function genGlobalCss(): string {
   return `@tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #ffffff;
+    --color-surface: #f8f8f8;
+    --color-border: #ebebeb;
+    --color-heading: #111111;
+    --color-body: #374151;
+    --color-muted: #6b7280;
+    --color-link: #2563eb;
+    --color-link-hover: #1d4ed8;
+    --nav-bg: rgba(255, 255, 255, 0.92);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+    --shadow-dropdown: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  [data-theme="dark"] {
+    --color-bg: #0d0d0d;
+    --color-surface: #1c1c1c;
+    --color-border: #2e2e2e;
+    --color-heading: #f0f0f0;
+    --color-body: #c9cdd5;
+    --color-muted: #888888;
+    --color-link: #60a5fa;
+    --color-link-hover: #93c5fd;
+    --nav-bg: rgba(13, 13, 13, 0.92);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-dropdown: 0 8px 28px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-body);
+  }
+}
 `
 }
 
