@@ -225,101 +225,323 @@ import navData from '../../data/navigation.json'
 type NavItem = { label: string; href: string; children?: NavItem[] }
 const navItems: NavItem[] = (navData as any).primary ?? Object.values(navData as any)[0] ?? []
 const current = Astro.url.pathname
+
+function isActive(href: string) {
+  return href === '/' ? current === '/' : current.startsWith(href)
+}
 ---
 
-<header class="border-b border-gray-200 bg-white sticky top-0 z-50">
-  <nav class="container mx-auto px-4 max-w-5xl flex items-center justify-between h-14">
-    <a href="/" class="text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors">
-      ${siteTitle}
-    </a>
+<header class="nav-header">
+  <div class="nav-inner">
+    <!-- Logo -->
+    <a href="/" class="nav-logo">${siteTitle}</a>
 
     <!-- Desktop nav -->
-    <ul class="hidden md:flex gap-1 items-center">
-      {navItems.map((item: NavItem) => (
-        <li class="relative group">
-          <a
-            href={item.href}
-            class={\`px-3 py-2 rounded-md text-sm transition-colors \${
-              current === item.href || (item.href !== '/' && current.startsWith(item.href))
-                ? 'text-gray-900 font-medium bg-gray-100'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-            }\`}
-          >
-            {item.label}{item.children && item.children.length > 0 ? ' ▾' : ''}
-          </a>
-          {item.children && item.children.length > 0 && (
-            <ul class="absolute left-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 py-1">
-              {item.children.map((child: NavItem) => (
-                <li>
-                  <a
-                    href={child.href}
-                    class={\`block px-4 py-2 text-sm hover:bg-gray-50 hover:text-gray-900 \${
-                      current === child.href || (child.href !== '/' && current.startsWith(child.href))
-                        ? 'text-gray-900 font-medium'
-                        : 'text-gray-700'
-                    }\`}
-                  >
-                    {child.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </li>
-      ))}
+    <ul class="nav-list">
+      {navItems.map((item: NavItem) => {
+        const hasChildren = item.children && item.children.length > 0
+        return (
+          <li class="nav-item">
+            <a href={item.href} class={\`nav-link \${isActive(item.href) ? 'nav-link--active' : ''}\`}>
+              <span class="nav-link-text">{item.label}</span>
+              {hasChildren && (
+                <svg class="nav-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              )}
+            </a>
+            {hasChildren && (
+              <div class="nav-dropdown">
+                <ul class="nav-dropdown-list">
+                  {item.children!.map((child: NavItem) => (
+                    <li>
+                      <a href={child.href} class={\`nav-dropdown-link \${isActive(child.href) ? 'nav-dropdown-link--active' : ''}\`}>
+                        {child.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </li>
+        )
+      })}
     </ul>
 
     <!-- Mobile hamburger -->
-    <button id="menu-toggle" class="md:hidden p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors" aria-label="Toggle menu">
-      ☰
+    <button id="menu-toggle" class="nav-burger" aria-label="Открыть меню" aria-expanded="false">
+      <span class="nav-burger-bar"></span>
+      <span class="nav-burger-bar"></span>
+      <span class="nav-burger-bar"></span>
     </button>
-  </nav>
+  </div>
 
-  <!-- Mobile nav -->
-  <div id="mobile-menu" class="hidden md:hidden border-t border-gray-100 bg-white">
-    <ul class="px-4 py-3 space-y-1">
-      {navItems.map((item: NavItem) => (
-        <li>
-          <a
-            href={item.href}
-            class={\`block px-3 py-2 rounded-md text-sm transition-colors \${
-              current === item.href || (item.href !== '/' && current.startsWith(item.href))
-                ? 'text-gray-900 font-medium bg-gray-100'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-            }\`}
-          >
-            {item.label}
-          </a>
-          {item.children && item.children.length > 0 && (
-            <ul class="mt-1 ml-3 space-y-1">
-              {item.children.map((child: NavItem) => (
-                <li>
-                  <a
-                    href={child.href}
-                    class={\`block px-3 py-2 rounded-md text-sm transition-colors \${
-                      current === child.href || (child.href !== '/' && current.startsWith(child.href))
-                        ? 'text-gray-900 font-medium bg-gray-100'
-                        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-                    }\`}
-                  >
-                    {child.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </li>
-      ))}
+  <!-- Mobile drawer -->
+  <div id="mobile-menu" class="nav-mobile" aria-hidden="true">
+    <ul class="nav-mobile-list">
+      {navItems.map((item: NavItem) => {
+        const hasChildren = item.children && item.children.length > 0
+        return (
+          <li>
+            <a href={item.href} class={\`nav-mobile-link \${isActive(item.href) ? 'nav-mobile-link--active' : ''}\`}>
+              {item.label}
+            </a>
+            {hasChildren && (
+              <ul class="nav-mobile-sub">
+                {item.children!.map((child: NavItem) => (
+                  <li>
+                    <a href={child.href} class={\`nav-mobile-sub-link \${isActive(child.href) ? 'nav-mobile-sub-link--active' : ''}\`}>
+                      {child.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        )
+      })}
     </ul>
   </div>
 </header>
 
+<style>
+  .nav-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid #f0f0f0;
+    box-shadow: 0 1px 3px 0 rgba(0,0,0,.04);
+  }
+
+  .nav-inner {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    height: 3.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+
+  /* Logo */
+  .nav-logo {
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #111;
+    text-decoration: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .nav-logo:hover { color: #555; }
+
+  /* Desktop list */
+  .nav-list {
+    display: none;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    align-items: center;
+    gap: 0.125rem;
+    flex: 1;
+    justify-content: flex-end;
+  }
+  @media (min-width: 768px) { .nav-list { display: flex; } }
+
+  .nav-item {
+    position: relative;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 450;
+    color: #555;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.15s, background 0.15s;
+  }
+  .nav-link:hover {
+    color: #111;
+    background: #f4f4f5;
+  }
+  .nav-link--active {
+    color: #111;
+    font-weight: 600;
+    background: #f4f4f5;
+  }
+
+  .nav-link-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 12rem;
+  }
+
+  .nav-chevron {
+    width: 0.7rem;
+    height: 0.7rem;
+    flex-shrink: 0;
+    opacity: 0.5;
+    transition: transform 0.2s, opacity 0.2s;
+  }
+  .nav-item:hover .nav-chevron {
+    transform: rotate(180deg);
+    opacity: 0.8;
+  }
+
+  /* Dropdown */
+  .nav-dropdown {
+    position: absolute;
+    top: calc(100% + 0.375rem);
+    left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+    min-width: 16rem;
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 0.75rem;
+    box-shadow: 0 8px 24px -4px rgba(0,0,0,.12), 0 2px 8px -2px rgba(0,0,0,.06);
+    padding: 0.375rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+    pointer-events: none;
+  }
+  .nav-item:hover .nav-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+  }
+
+  .nav-dropdown-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-dropdown-link {
+    display: block;
+    padding: 0.5rem 0.875rem;
+    border-radius: 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #444;
+    text-decoration: none;
+    transition: background 0.12s, color 0.12s;
+  }
+  .nav-dropdown-link:hover {
+    background: #f4f4f5;
+    color: #111;
+  }
+  .nav-dropdown-link--active {
+    background: #f0f0f0;
+    color: #111;
+    font-weight: 600;
+  }
+
+  /* Hamburger */
+  .nav-burger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0.4rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .nav-burger:hover { background: #f4f4f5; }
+  @media (min-width: 768px) { .nav-burger { display: none; } }
+
+  .nav-burger-bar {
+    display: block;
+    width: 100%;
+    height: 1.5px;
+    background: #555;
+    border-radius: 1px;
+    transition: transform 0.2s, opacity 0.2s;
+  }
+  .nav-burger.is-open .nav-burger-bar:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+  .nav-burger.is-open .nav-burger-bar:nth-child(2) { opacity: 0; }
+  .nav-burger.is-open .nav-burger-bar:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+
+  /* Mobile drawer */
+  .nav-mobile {
+    display: none;
+    border-top: 1px solid #f0f0f0;
+    background: #fff;
+  }
+  .nav-mobile.is-open { display: block; }
+  @media (min-width: 768px) { .nav-mobile { display: none !important; } }
+
+  .nav-mobile-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .nav-mobile-link {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #333;
+    text-decoration: none;
+    transition: background 0.12s;
+  }
+  .nav-mobile-link:hover { background: #f4f4f5; }
+  .nav-mobile-link--active { background: #f0f0f0; color: #111; font-weight: 600; }
+
+  .nav-mobile-sub {
+    list-style: none;
+    margin: 0.25rem 0 0.5rem 1rem;
+    padding: 0;
+    border-left: 2px solid #e8e8e8;
+    padding-left: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .nav-mobile-sub-link {
+    display: block;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: #555;
+    text-decoration: none;
+    transition: background 0.12s, color 0.12s;
+  }
+  .nav-mobile-sub-link:hover { background: #f4f4f5; color: #111; }
+  .nav-mobile-sub-link--active { color: #111; font-weight: 600; }
+</style>
+
 <script>
   const btn = document.getElementById('menu-toggle')
   const menu = document.getElementById('mobile-menu')
+
   btn?.addEventListener('click', () => {
-    const isHidden = menu?.classList.toggle('hidden')
-    if (btn) btn.textContent = isHidden === false ? '✕' : '☰'
+    const open = menu?.classList.toggle('is-open')
+    btn.classList.toggle('is-open', open)
+    btn.setAttribute('aria-expanded', String(open))
+    menu?.setAttribute('aria-hidden', String(!open))
+    btn.setAttribute('aria-label', open ? 'Закрыть меню' : 'Открыть меню')
   })
 </script>
 `
