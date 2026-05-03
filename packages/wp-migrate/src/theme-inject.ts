@@ -154,20 +154,29 @@ export async function injectContent(
     }
   }
 
-  // Copy media
+  // Copy media to the theme's designated directory
   const sourceMedia = join(contentTmpDir, 'public', 'media')
   let mediaFiles = 0
   if (existsSync(sourceMedia)) {
-    // For themes that use public/images/, copy there. For public/, copy to public/media/.
-    // We keep /media/ as the subdir to keep image paths valid.
     const destMedia = adapter.mediaDir === 'public'
       ? join(outputDir, 'public', 'media')
       : join(outputDir, adapter.mediaDir)
     await mkdir(destMedia, { recursive: true })
 
+    // Also ensure /media/ paths in post body markdown resolve — content written by
+    // keystatic-transform always uses /media/filename, so we copy to public/media/
+    // as an alias even when the theme uses a different primary media directory.
+    const publicMediaAlias = join(outputDir, 'public', 'media')
+    if (destMedia !== publicMediaAlias) {
+      await mkdir(publicMediaAlias, { recursive: true })
+    }
+
     const files = await readdir(sourceMedia)
     for (const file of files) {
       await copyFile(join(sourceMedia, file), join(destMedia, file)).catch(() => {})
+      if (destMedia !== publicMediaAlias) {
+        await copyFile(join(sourceMedia, file), join(publicMediaAlias, file)).catch(() => {})
+      }
       mediaFiles++
     }
   }

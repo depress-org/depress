@@ -33,11 +33,14 @@ export const astrowindAdapter: ThemeAdapter = {
 
   mapFrontmatter(fm: ArticleFM, siteAuthor: string): Record<string, unknown> {
     return {
-      publishDate: fm.publishedAt ? new Date(fm.publishedAt).toISOString() : new Date().toISOString(),
+      // Must be a Date object (not ISO string) — AstroWind schema uses z.date()
+      publishDate: fm.publishedAt ? new Date(fm.publishedAt) : new Date(),
       title: fm.title ?? 'Untitled',
       excerpt: fm.excerpt ?? fm.seoDescription ?? '',
-      // AstroWind accepts a plain URL string for image
-      image: fm.coverImage ? `/images/blog/${fm.coverImage.split('/').pop()}` : '',
+      // Images are in public/images/blog/ (served as static assets).
+      // AstroWind's <Image> component requires explicit width+height for public/ files;
+      // omit the field so the theme skips the hero image rather than throwing.
+      // To enable hero images, move them to src/assets/ and import them instead.
       category: fm.category ?? '',
       tags: fm.tags ?? [],
       author: siteAuthor || 'Author',
@@ -133,19 +136,27 @@ export const footerData = {
       await writeFile(navPath, navContent, 'utf-8')
     }
 
-    // 3. Patch astro.config.ts — set site URL if provided
-    if (opts.siteUrl) {
-      const astroCfgPath = join(outputDir, 'astro.config.ts')
-      if (existsSync(astroCfgPath)) {
-        let cfg = await readFile(astroCfgPath, 'utf-8')
-        // Replace or insert site: '...'
+    // 3. Patch astro.config.ts — set site URL + noop image service
+    // The noop service is needed because migrated content images live in public/
+    // and Astro's optimizer can't infer dimensions for public/ files.
+    const astroCfgPath = join(outputDir, 'astro.config.ts')
+    if (existsSync(astroCfgPath)) {
+      let cfg = await readFile(astroCfgPath, 'utf-8')
+      if (opts.siteUrl) {
         if (/site:\s*['"`]/.test(cfg)) {
           cfg = cfg.replace(/(site:\s*)(['"`])[^'"`]*\2/, `$1$2${opts.siteUrl}$2`)
         } else {
-          cfg = cfg.replace('output:', `site: '${opts.siteUrl}',\n  output:`)
+          cfg = cfg.replace('export default defineConfig({', `export default defineConfig({\n  site: '${opts.siteUrl}',`)
         }
-        await writeFile(astroCfgPath, cfg, 'utf-8')
       }
+      // Inject noop image service before the closing }) of defineConfig
+      if (!cfg.includes('noop')) {
+        cfg = cfg.replace(
+          /(\bintegrations:\s*\[)/,
+          `image: { service: { entrypoint: 'astro/assets/services/noop' } },\n\n  $1`,
+        )
+      }
+      await writeFile(astroCfgPath, cfg, 'utf-8')
     }
   },
 }
