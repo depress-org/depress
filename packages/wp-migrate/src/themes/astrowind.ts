@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import type { ThemeAdapter, ArticleFM, PageFM, PatchConfigOpts } from './types.js'
+import type { ThemeAdapter, ArticleFM, PageFM, PatchConfigOpts, NavItem } from './types.js'
 
 /**
  * AstroWind – https://github.com/onwidget/astrowind
@@ -94,30 +94,14 @@ export const astrowindAdapter: ThemeAdapter = {
       await writeFile(configYamlPath, yaml, 'utf-8')
     }
 
-    // 2. Patch src/navigation.ts — replace demo links with simple Blog nav
+    // 2. Patch src/navigation.ts — write nav from WP menus (or sensible fallback)
     const navPath = join(outputDir, 'src', 'navigation.ts')
     if (existsSync(navPath)) {
-      const navContent = `import { getPermalink, getBlogPermalink, getAsset } from './utils/permalinks';
+      const navContent = `import { getPermalink, getAsset } from './utils/permalinks';
 
 export const headerData = {
   links: [
-    {
-      text: 'Home',
-      href: getPermalink('/'),
-    },
-    {
-      text: 'Blog',
-      href: getBlogPermalink(),
-    },
-    {
-      text: 'About',
-      href: getPermalink('/about'),
-    },
-    {
-      text: 'Contact',
-      href: getPermalink('/contact'),
-    },
-  ],
+${serializeAstrowindLinks(opts.navItems)}  ],
   actions: [],
 };
 
@@ -149,14 +133,35 @@ export const footerData = {
           cfg = cfg.replace('export default defineConfig({', `export default defineConfig({\n  site: '${opts.siteUrl}',`)
         }
       }
-      // Inject noop image service before the closing }) of defineConfig
+      // Replace existing image: block or inject before integrations:
       if (!cfg.includes('noop')) {
-        cfg = cfg.replace(
-          /(\bintegrations:\s*\[)/,
-          `image: { service: { entrypoint: 'astro/assets/services/noop' } },\n\n  $1`,
-        )
+        if (/^\s*image\s*:/m.test(cfg)) {
+          // Replace the existing image: { ... } block (handles multi-line blocks)
+          cfg = cfg.replace(/\bimage\s*:\s*\{[^}]*(?:\{[^}]*\}[^}]*)?\},?\s*/s, `image: { service: { entrypoint: 'astro/assets/services/noop' } },\n\n  `)
+        } else {
+          cfg = cfg.replace(
+            /(\bintegrations:\s*\[)/,
+            `image: { service: { entrypoint: 'astro/assets/services/noop' } },\n\n  $1`,
+          )
+        }
       }
       await writeFile(astroCfgPath, cfg, 'utf-8')
     }
   },
+}
+
+function serializeAstrowindLinks(navItems: NavItem[], indent = '    '): string {
+  const items = navItems.length > 0
+    ? navItems
+    : [{ label: 'Home', href: '/', children: [] }, { label: 'Blog', href: '/blog', children: [] }]
+
+  return items.map((item) => {
+    if (item.children && item.children.length > 0) {
+      const children = item.children
+        .map((c) => `${indent}    { text: ${JSON.stringify(c.label)}, href: getPermalink(${JSON.stringify(c.href)}) },`)
+        .join('\n')
+      return `${indent}{\n${indent}  text: ${JSON.stringify(item.label)},\n${indent}  links: [\n${children}\n${indent}  ],\n${indent}},`
+    }
+    return `${indent}{ text: ${JSON.stringify(item.label)}, href: getPermalink(${JSON.stringify(item.href)}) },`
+  }).join('\n') + '\n'
 }

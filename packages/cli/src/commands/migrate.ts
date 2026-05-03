@@ -307,6 +307,8 @@ export async function runMigrate(options: MigrateOptions) {
           siteDescription: `${wpExport.siteTitle} — blog`,
           siteUrl: 'https://your-site.pages.dev',
           authorName: '',
+          navItems,
+          allMenus,
         })
       }
       injectSpinner.succeed(

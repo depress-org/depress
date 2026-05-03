@@ -1,3 +1,6 @@
+import type { NavItem } from '@depress-org/core'
+export type { NavItem }
+
 export interface ArticleFM {
   title?: string
   publishedAt?: string
@@ -19,6 +22,8 @@ export interface PatchConfigOpts {
   siteDescription: string
   siteUrl: string
   authorName: string
+  navItems: NavItem[]
+  allMenus: Record<string, NavItem[]>
 }
 
 export interface ThemeAdapter {
