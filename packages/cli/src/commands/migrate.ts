@@ -12,11 +12,12 @@ import {
   parseNavFromXml,
   transformWp2mdOutput,
   scaffoldAstroProject,
-  downloadTheme,
+  provisionTheme,
   clearSampleContent,
   injectContent,
   getThemeAdapter,
   listThemes,
+  DEFAULT_THEME_ID,
 } from '@depress-org/wp-migrate'
 
 
@@ -240,22 +241,27 @@ export async function runMigrate(options: MigrateOptions) {
     process.exit(1)
   }
 
-  const theme = options.theme && options.theme !== 'default' ? options.theme : null
-  const adapter = theme ? getThemeAdapter(theme) : null
+  // "scaffold" = old Keystatic-only mode (fallback / power-user escape hatch)
+  // anything else (including omitted → default "astrowind") = theme mode
+  const useScaffold = options.theme === 'scaffold'
+  const themeId = useScaffold ? null : (options.theme && options.theme !== 'default' ? options.theme : DEFAULT_THEME_ID)
+  const adapter = themeId ? getThemeAdapter(themeId) : null
 
-  if (theme && !adapter) {
-    console.error(chalk.red(`\nUnknown theme: "${theme}"\n`))
+  if (themeId && !adapter) {
+    console.error(chalk.red(`\nUnknown theme: "${themeId}"\n`))
     console.log(chalk.gray('Available themes:'))
     for (const t of listThemes()) {
-      console.log(chalk.gray(`  ${chalk.cyan(t.id.padEnd(12))} ${t.name} — ${t.description}`))
+      const bundledNote = t.bundled ? chalk.green(' [bundled]') : ''
+      console.log(chalk.gray(`  ${chalk.cyan(t.id.padEnd(12))} ${t.name}${bundledNote} — ${t.description}`))
     }
+    console.log(chalk.gray(`  ${'scaffold'.padEnd(12)} Keystatic + custom Astro scaffold (no external theme)`))
     process.exit(1)
   }
 
   // Step 3: Transform WP content
   const transformSpinner = ora('Transforming to Astro/Keystatic structure (stage 2)…').start()
   let transformResult: Awaited<ReturnType<typeof transformWp2mdOutput>>
-  // For theme mode, write to tmpDir; for default, write directly to outputDir
+  // For theme mode, write to tmpDir so scaffold/theme files stay separate
   const contentDest = adapter ? join(tmpDir, 'content') : outputDir
   try {
     await mkdir(contentDest, { recursive: true })
@@ -274,14 +280,15 @@ export async function runMigrate(options: MigrateOptions) {
 
   if (adapter) {
     // ── Theme mode ──────────────────────────────────────────────────────────
-    const dlSpinner = ora(`Downloading theme: ${chalk.bold(adapter.name)}…`).start()
+    const themeVerb = adapter.bundled ? 'Copying bundled theme' : 'Downloading theme'
+    const dlSpinner = ora(`${themeVerb}: ${chalk.bold(adapter.name)}…`).start()
     try {
       await mkdir(outputDir, { recursive: true })
-      await downloadTheme(adapter, outputDir)
+      await provisionTheme(adapter, outputDir)
       await clearSampleContent(outputDir, adapter)
-      dlSpinner.succeed(`Theme ready: ${chalk.bold(adapter.name)}`)
+      dlSpinner.succeed(`Theme ready: ${chalk.bold(adapter.name)}${adapter.bundled ? chalk.green(' (bundled)') : ''}`)
     } catch (err) {
-      dlSpinner.fail(`Theme download failed: ${err instanceof Error ? err.message : String(err)}`)
+      dlSpinner.fail(`Theme provision failed: ${err instanceof Error ? err.message : String(err)}`)
       await rm(tmpDir, { recursive: true, force: true })
       process.exit(1)
     }

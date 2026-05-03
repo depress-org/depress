@@ -27,7 +27,13 @@ export interface ThemeAdapter {
   repo: string           // 'user/repo' on GitHub
   branch: string         // usually 'main'
   description: string
-  contentDir: string     // relative path in theme where blog posts go, e.g. 'src/content/blog'
+  /**
+   * When true the theme is stored in bundled-themes/<id>/ inside the package
+   * and will be copied locally instead of downloaded from GitHub at generation time.
+   * This guarantees the theme never changes, moves, or disappears.
+   */
+  bundled?: boolean
+  contentDir: string     // relative path in theme where blog posts go, e.g. 'src/data/post'
   pagesDir?: string      // where pages go (if theme supports pages)
   mediaDir: string       // e.g. 'public/images' or 'public'
   fileExt: 'md' | 'mdx'

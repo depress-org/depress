@@ -13,8 +13,8 @@ export type { ScaffoldOptions } from './scaffold.js'
 export { parseNavFromXml } from './nav-parser.js'
 
 // Theme adapter system
-export { downloadTheme, clearSampleContent, injectContent } from './theme-inject.js'
+export { provisionTheme, downloadTheme, clearSampleContent, injectContent } from './theme-inject.js'
 export type { InjectResult, PatchConfigOpts } from './theme-inject.js'
-export { getThemeAdapter, listThemes, THEMES } from './themes/registry.js'
+export { getThemeAdapter, listThemes, THEMES, DEFAULT_THEME_ID } from './themes/registry.js'
 export type { ThemeAdapter, ArticleFM } from './themes/types.js'
 

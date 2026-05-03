@@ -1,9 +1,44 @@
-import { readdir, readFile, writeFile, mkdir, copyFile, rm } from 'fs/promises'
+import { readdir, readFile, writeFile, mkdir, copyFile, rm, cp } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, extname } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import { spawn } from 'child_process'
 import matter from 'gray-matter'
 import type { ThemeAdapter, PatchConfigOpts } from './themes/types.js'
+
+// Resolve the bundled-themes/ directory relative to THIS file at runtime.
+// dist/theme-inject.js → ../../bundled-themes/
+const _thisFile = fileURLToPath(import.meta.url)
+const _bundledRoot = join(dirname(_thisFile), '..', 'bundled-themes')
+
+/**
+ * Provision a theme into outputDir.
+ * If `adapter.bundled` is true the theme files are copied from the
+ * bundled-themes/<id>/ directory already stored in this package — no
+ * network access required, version is frozen.
+ * Otherwise the theme tarball is downloaded from GitHub.
+ */
+export async function provisionTheme(adapter: ThemeAdapter, outputDir: string): Promise<void> {
+  if (adapter.bundled) {
+    await copyBundledTheme(adapter, outputDir)
+  } else {
+    await downloadTheme(adapter, outputDir)
+  }
+}
+
+/** Copy a bundled theme from bundled-themes/<id>/ into outputDir */
+async function copyBundledTheme(adapter: ThemeAdapter, outputDir: string): Promise<void> {
+  const src = join(_bundledRoot, adapter.id)
+  if (!existsSync(src)) {
+    throw new Error(
+      `Bundled theme "${adapter.id}" not found at ${src}. ` +
+        `Run: npm run fetch-themes  (or re-clone the repo)`,
+    )
+  }
+  await mkdir(outputDir, { recursive: true })
+  // Node 16.7+ recursive copy
+  await cp(src, outputDir, { recursive: true })
+}
 
 /** Download a GitHub theme repo tarball and extract into outputDir */
 export async function downloadTheme(adapter: ThemeAdapter, outputDir: string): Promise<void> {
