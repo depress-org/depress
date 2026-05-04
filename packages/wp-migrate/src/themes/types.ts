@@ -5,9 +5,11 @@ export interface ArticleFM {
   title?: string
   publishedAt?: string
   excerpt?: string
+  author?: string
   category?: string
   tags?: string[]
   coverImage?: string
+  featuredImageUrl?: string
   seoTitle?: string
   seoDescription?: string
 }

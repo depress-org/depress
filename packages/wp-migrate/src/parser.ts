@@ -11,7 +11,7 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
     ignoreAttributes: false,
     attributeNamePrefix: '_',
     textNodeName: '#text',
-    isArray: (name) => ['item', 'category', 'tag'].includes(name),
+    isArray: (name) => ['item', 'category', 'tag', 'wp:postmeta'].includes(name),
   })
 
   const result = parser.parse(xml)
@@ -29,17 +29,33 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
   const categoriesMap = new Map<string, WPCategory>()
   const tagsMap = new Map<string, WPTag>()
   const media: any[] = []
+  // Map attachment id → url for resolving featured images
+  const attachmentUrlById = new Map<number, string>()
+
+  // First pass: collect all attachments
+  for (const item of items) {
+    if (item['wp:post_type'] === 'attachment') {
+      const id = Number(item['wp:post_id'])
+      const url = item['wp:attachment_url'] ?? item.guid?.['#text'] ?? item.guid ?? ''
+      if (id && url) attachmentUrlById.set(id, url)
+    }
+  }
 
   for (const item of items) {
     const postType = item['wp:post_type']
 
     if (postType === 'attachment') {
+      const postmeta: any[] = Array.isArray(item['wp:postmeta']) ? item['wp:postmeta'] : []
+      const altText =
+        postmeta.find((m: any) => m['wp:meta_key'] === '_wp_attachment_image_alt')?.['wp:meta_value'] ??
+        item.title ??
+        ''
       media.push({
-        id: item['wp:post_id'],
-        url: item['wp:attachment_url'] ?? item.guid,
-        filename: item['wp:post_name'],
+        id: Number(item['wp:post_id']),
+        url: item['wp:attachment_url'] ?? item.guid?.['#text'] ?? item.guid ?? '',
+        filename: item['wp:post_name'] ?? '',
         mimeType: '',
-        altText: item.title ?? '',
+        altText: String(altText),
       })
       continue
     }
@@ -70,8 +86,34 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
       }
     }
 
+    // Extract postmeta: _thumbnail_id, Yoast SEO, ACF fields
+    const postmeta: any[] = Array.isArray(item['wp:postmeta']) ? item['wp:postmeta'] : []
+    let featuredImageId: string | undefined
+    let seoTitle = ''
+    let seoDescription = ''
+    const customFields: Record<string, string> = {}
+
+    for (const meta of postmeta) {
+      const key = String(meta['wp:meta_key'] ?? '')
+      const val = String(meta['wp:meta_value'] ?? '')
+      if (key === '_thumbnail_id') {
+        featuredImageId = val
+      } else if (key === '_yoast_wpseo_title') {
+        seoTitle = val
+      } else if (key === '_yoast_wpseo_metadesc') {
+        seoDescription = val
+      } else if (key && !key.startsWith('_')) {
+        // Public custom fields (ACF etc.)
+        customFields[key] = val
+      }
+    }
+
+    const featuredImageUrl = featuredImageId
+      ? attachmentUrlById.get(Number(featuredImageId))
+      : undefined
+
     posts.push({
-      id: item['wp:post_id'],
+      id: Number(item['wp:post_id']),
       title: item.title ?? 'Untitled',
       slug: decodeSlug(item['wp:post_name'] ?? String(item['wp:post_id'])),
       content: item['content:encoded'] ?? '',
@@ -79,8 +121,14 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
       status: item['wp:status'] ?? 'draft',
       type: postType,
       date: item['wp:post_date'] ?? new Date().toISOString(),
+      author: item['dc:creator'] ?? '',
       categories: itemCategories,
       tags: itemTags,
+      featuredImageId,
+      featuredImageUrl,
+      seoTitle: seoTitle || undefined,
+      seoDescription: seoDescription || undefined,
+      customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
     })
   }
 

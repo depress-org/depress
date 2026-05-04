@@ -36,15 +36,15 @@ export const astrowindAdapter: ThemeAdapter = {
     return {
       // Must be a Date object (not ISO string) — AstroWind schema uses z.date()
       publishDate: fm.publishedAt ? new Date(fm.publishedAt) : new Date(),
-      title: fm.title ?? 'Untitled',
-      excerpt: fm.excerpt ?? fm.seoDescription ?? '',
+      title: fm.seoTitle || fm.title || 'Untitled',
+      excerpt: fm.seoDescription || fm.excerpt || '',
       // Images are in public/images/blog/ (served as static assets).
       // AstroWind's <Image> component requires explicit width+height for public/ files;
       // omit the field so the theme skips the hero image rather than throwing.
       // To enable hero images, move them to src/assets/ and import them instead.
       category: fm.category ?? '',
       tags: fm.tags ?? [],
-      author: siteAuthor || 'Author',
+      author: fm.author || siteAuthor || 'Author',
       draft: false,
     }
   },

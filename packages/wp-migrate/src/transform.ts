@@ -6,6 +6,25 @@ import { join } from 'path'
 const turndown = new TurndownService({
   headingStyle: 'atx',
   codeBlockStyle: 'fenced',
+  bulletListMarker: '-',
+})
+
+// Preserve iframe embeds rather than dropping them
+turndown.addRule('iframe-video', {
+  filter: 'iframe',
+  replacement: (_content, node) => {
+    const src = (node as Element).getAttribute('src') ?? ''
+    if (!src) return ''
+    if (src.includes('youtube.com') || src.includes('youtu.be')) {
+      const id = src.match(/(?:embed\/|v=|youtu\.be\/)([A-Za-z0-9_-]+)/)?.[1]
+      return id ? `\nhttps://www.youtube.com/watch?v=${id}\n` : `\n<!-- youtube: ${src} -->\n`
+    }
+    if (src.includes('vimeo.com')) {
+      const id = src.match(/vimeo\.com\/(?:video\/)?(\d+)/)?.[1]
+      return id ? `\nhttps://vimeo.com/${id}\n` : `\n<!-- vimeo: ${src} -->\n`
+    }
+    return `\n<!-- iframe: ${src} -->\n`
+  },
 })
 
 /**
@@ -30,13 +49,17 @@ export async function transformPosts(
         continue
       }
 
-      const markdown = htmlToMarkdown(post.content)
+      const { content: cleaned, warnings } = handleShortcodes(post.content)
+      const markdown = turndown.turndown(cleaned)
       const frontmatter = buildFrontmatter(post)
-      const content = `---\n${frontmatter}\n---\n\n${markdown}`
+      const warnBlock = warnings.length > 0
+        ? `\n<!-- depress-warnings: ${warnings.join(' | ')} -->\n`
+        : ''
+      const fileContent = `---\n${frontmatter}\n---\n${warnBlock}\n${markdown}`
 
       const dir = join(outputDir, 'src', 'content', post.type === 'page' ? 'pages' : 'articles', post.slug)
       await mkdir(dir, { recursive: true })
-      await writeFile(join(dir, 'index.mdoc'), content, 'utf-8')
+      await writeFile(join(dir, 'index.mdoc'), fileContent, 'utf-8')
 
       report.success++
     } catch (error) {
@@ -51,14 +74,47 @@ export async function transformPosts(
   return report
 }
 
-function htmlToMarkdown(html: string): string {
-  if (!html) return ''
-  // Handle WordPress shortcodes
-  const cleaned = html
-    .replace(/\[caption[^\]]*\](.*?)\[\/caption\]/gs, '$1')
-    .replace(/\[gallery[^\]]*\]/g, '<!-- gallery -->')
-    .replace(/\[[^\]]+\]/g, '') // Remove remaining shortcodes
-  return turndown.turndown(cleaned)
+function handleShortcodes(html: string): { content: string; warnings: string[] } {
+  if (!html) return { content: '', warnings: [] }
+  const warnings: string[] = []
+
+  let out = html
+
+  // Known recoverable: caption → keep inner content
+  out = out.replace(/\[caption[^\]]*\]([\s\S]*?)\[\/caption\]/gi, '$1')
+
+  // Gallery → placeholder comment
+  out = out.replace(/\[gallery[^\]]*\]/gi, '<!-- gallery: review manually -->')
+
+  // Embed → unwrap, keep the URL
+  out = out.replace(/\[embed\]([\s\S]*?)\[\/embed\]/gi, '$1')
+
+  // Page builder text blocks: extract inner HTML content
+  out = out.replace(
+    /\[(et_pb_text|vc_column_text|fusion_text|text_block)[^\]]*\]([\s\S]*?)\[\/\1\]/gi,
+    '$2',
+  )
+
+  // Page builder structural wrappers: strip the tag, keep children
+  out = out.replace(
+    /\[(et_pb_[a-z_]+|vc_[a-z_]+|fusion_[a-z_]+|mk_[a-z_]+)[^\]]*\]([\s\S]*?)\[\/\1\]/gi,
+    '$2',
+  )
+  out = out.replace(/\[(et_pb_[a-z_]+|vc_[a-z_]+|fusion_[a-z_]+|mk_[a-z_]+)[^\]]*\/?\]/gi, '')
+
+  // Remaining unknown paired shortcodes: preserve inner content as comment
+  out = out.replace(/\[([a-z][a-z0-9_-]*)[^\]]*\]([\s\S]*?)\[\/\1\]/gi, (_m, tag, inner) => {
+    warnings.push(`shortcode:[${tag}]`)
+    return `<!-- shortcode-start:[${tag}] -->\n${inner}\n<!-- shortcode-end:[${tag}] -->`
+  })
+
+  // Remaining unknown self-closing shortcodes
+  out = out.replace(/\[([a-z][a-z0-9_-]*)[^\]]*\/?\]/gi, (_m, tag) => {
+    warnings.push(`shortcode:[${tag}]`)
+    return `<!-- shortcode:[${tag}] -->`
+  })
+
+  return { content: out, warnings }
 }
 
 function buildFrontmatter(post: WPPost): string {
@@ -67,9 +123,14 @@ function buildFrontmatter(post: WPPost): string {
     publishedAt: post.date,
     slug: post.slug,
   }
+  if (post.author) fields.author = post.author
   if (post.categories.length > 0) fields.category = post.categories[0]
   if (post.tags.length > 0) fields.tags = post.tags
-  if (post.excerpt) fields.excerpt = post.excerpt.replace(/<[^>]+>/g, '').trim()
+  const rawExcerpt = (post.excerpt ?? '').replace(/<[^>]+>/g, '').trim()
+  if (rawExcerpt) fields.excerpt = rawExcerpt
+  if (post.seoTitle) fields.seoTitle = post.seoTitle
+  if (post.seoDescription) fields.seoDescription = post.seoDescription
+  if (post.featuredImageUrl) fields.featuredImageUrl = post.featuredImageUrl
 
   return Object.entries(fields)
     .map(([key, value]) => {

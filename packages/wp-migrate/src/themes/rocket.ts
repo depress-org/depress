@@ -32,10 +32,10 @@ export const rocketAdapter: ThemeAdapter = {
 
   mapFrontmatter(fm: ArticleFM, siteAuthor: string): Record<string, unknown> {
     return {
-      title: (fm.title ?? 'Untitled').slice(0, 100),
-      description: (fm.excerpt ?? fm.seoDescription ?? '').slice(0, 200),
+      title: (fm.seoTitle || fm.title || 'Untitled').slice(0, 100),
+      description: (fm.seoDescription || fm.excerpt || '').slice(0, 200),
       publishedAt: fm.publishedAt ? new Date(fm.publishedAt) : new Date(),
-      author: siteAuthor || 'Team',
+      author: fm.author || siteAuthor || 'Team',
       tags: fm.tags ?? [],
       draft: false,
       featured: false,

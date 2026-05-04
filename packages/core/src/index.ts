@@ -18,10 +18,14 @@ export interface WPPost {
   status: 'publish' | 'draft' | 'private'
   type: 'post' | 'page' | string
   date: string
+  author: string
   categories: string[]
   tags: string[]
-  featuredImage?: string
-  customFields?: Record<string, unknown>
+  featuredImageId?: string
+  featuredImageUrl?: string
+  seoTitle?: string
+  seoDescription?: string
+  customFields?: Record<string, string>
 }
 
 export interface WPCategory {
