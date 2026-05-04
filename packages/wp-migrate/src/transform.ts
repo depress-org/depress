@@ -49,8 +49,8 @@ export async function transformPosts(
         continue
       }
 
-      const { content: cleaned, warnings } = handleShortcodes(post.content)
-      const markdown = turndown.turndown(cleaned)
+      const { content: cleaned, warnings, shortcodeMarkers } = handleShortcodes(post.content)
+      const markdown = applyShortcodeMarkers(turndown.turndown(cleaned), shortcodeMarkers)
       const frontmatter = buildFrontmatter(post)
       const warnBlock = warnings.length > 0
         ? `\n<!-- depress-warnings: ${warnings.join(' | ')} -->\n`
@@ -74,8 +74,14 @@ export async function transformPosts(
   return report
 }
 
-function handleShortcodes(html: string): { content: string; warnings: string[] } {
-  if (!html) return { content: '', warnings: [] }
+interface HandleShortcodesResult {
+  content: string
+  warnings: string[]
+  shortcodeMarkers: Array<{ marker: string; tag: string; inner: string }>
+}
+
+function handleShortcodes(html: string): HandleShortcodesResult {
+  if (!html) return { content: '', warnings: [], shortcodeMarkers: [] }
   const warnings: string[] = []
 
   let out = html
@@ -83,8 +89,8 @@ function handleShortcodes(html: string): { content: string; warnings: string[] }
   // Known recoverable: caption → keep inner content
   out = out.replace(/\[caption[^\]]*\]([\s\S]*?)\[\/caption\]/gi, '$1')
 
-  // Gallery → placeholder comment
-  out = out.replace(/\[gallery[^\]]*\]/gi, '<!-- gallery: review manually -->')
+  // Gallery → alphanumeric marker (replaced with HTML comment after Turndown runs)
+  out = out.replace(/\[gallery[^\]]*\]/gi, 'DEPRESSGALLERY0')
 
   // Embed → unwrap, keep the URL
   out = out.replace(/\[embed\]([\s\S]*?)\[\/embed\]/gi, '$1')
@@ -102,19 +108,38 @@ function handleShortcodes(html: string): { content: string; warnings: string[] }
   )
   out = out.replace(/\[(et_pb_[a-z_]+|vc_[a-z_]+|fusion_[a-z_]+|mk_[a-z_]+)[^\]]*\/?\]/gi, '')
 
-  // Remaining unknown paired shortcodes: preserve inner content as comment
+  // Remaining unknown paired shortcodes: collect for post-Turndown replacement
+  const shortcodeMarkers: Array<{ marker: string; tag: string; inner: string }> = []
   out = out.replace(/\[([a-z][a-z0-9_-]*)[^\]]*\]([\s\S]*?)\[\/\1\]/gi, (_m, tag, inner) => {
     warnings.push(`shortcode:[${tag}]`)
-    return `<!-- shortcode-start:[${tag}] -->\n${inner}\n<!-- shortcode-end:[${tag}] -->`
+    const marker = `DEPRESSSHORTCODE${shortcodeMarkers.length}M`
+    shortcodeMarkers.push({ marker, tag, inner: inner.trim() })
+    return marker
   })
 
   // Remaining unknown self-closing shortcodes
   out = out.replace(/\[([a-z][a-z0-9_-]*)[^\]]*\/?\]/gi, (_m, tag) => {
     warnings.push(`shortcode:[${tag}]`)
-    return `<!-- shortcode:[${tag}] -->`
+    const marker = `DEPRESSSHORTCODE${shortcodeMarkers.length}M`
+    shortcodeMarkers.push({ marker, tag, inner: '' })
+    return marker
   })
 
-  return { content: out, warnings }
+  return { content: out, warnings, shortcodeMarkers }
+}
+
+function applyShortcodeMarkers(
+  markdown: string,
+  shortcodeMarkers: Array<{ marker: string; tag: string; inner: string }>,
+): string {
+  let out = markdown.replace(/DEPRESSGALLERY0/g, '<!-- gallery: review manually -->')
+  for (const { marker, tag, inner } of shortcodeMarkers) {
+    const replacement = inner
+      ? `<!-- shortcode:[${tag}] -->\n\n${inner}\n\n<!-- /shortcode:[${tag}] -->`
+      : `<!-- shortcode:[${tag}] -->`
+    out = out.replaceAll(marker, replacement)
+  }
+  return out
 }
 
 function buildFrontmatter(post: WPPost): string {

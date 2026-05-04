@@ -3,9 +3,12 @@
 > *De-press yourself.* Migrate any WordPress blog to **Astro + Keystatic** in minutes. Free hosting forever.
 
 [![npm](https://img.shields.io/npm/v/%40depress-org%2Fdepress)](https://npmjs.com/package/@depress-org/depress)
+[![CI](https://github.com/depress-org/depress/actions/workflows/ci.yml/badge.svg)](https://github.com/depress-org/depress/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/depress-org/depress)](LICENSE)
 [![node](https://img.shields.io/node/v/%40depress-org%2Fdepress)](https://npmjs.com/package/@depress-org/depress)
 [![sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-ea4aaa?logo=github-sponsors)](https://github.com/sponsors/bullwinkle)
+
+![depress demo](docs/demo.gif)
 
 ## Why?
 
@@ -176,11 +179,29 @@ depress migrate [options]
 
   -i, --input <path>    WordPress XML export file
   -d, --wp-dir <path>   WordPress public_html directory (for local media)
+  --db <path>           WordPress MySQL dump (.sql) — enables Yoast SEO, ACF fields,
+                        author profiles, and custom post type metadata
   -o, --output <path>   Output directory (default: ./output)
   -t, --theme <id>      Theme to use: astrowind (default) | rocket | scaffold
 
 depress init            Create a new blank Astro + Keystatic blog (interactive)
 ```
+
+### Getting the MySQL dump
+
+In your WordPress hosting control panel (cPanel, Plesk, or any phpMyAdmin):
+
+1. Go to **phpMyAdmin → your WordPress database → Export**
+2. Choose **Custom**, select all `wp_` tables, format: **SQL**
+3. Download the `.sql` file
+
+Then run:
+
+```bash
+depress migrate --input export.xml --db wordpress-database.sql --output ./my-blog
+```
+
+This unlocks **Yoast SEO titles and descriptions** for all post types, **ACF custom fields**, and **full author profiles** — critical for large sites where the WXR export alone is incomplete.
 
 ## Output structure
 

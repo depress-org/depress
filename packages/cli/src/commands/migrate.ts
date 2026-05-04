@@ -9,6 +9,7 @@ import { spawn } from 'child_process'
 import { fileURLToPath } from 'url'
 import {
   parseWPExport,
+  readWPDatabase,
   parseNavFromXml,
   transformWp2mdOutput,
   scaffoldAstroProject,
@@ -24,6 +25,7 @@ import {
 export interface MigrateOptions {
   input?: string
   wpDir?: string
+  db?: string
   output: string
   repo?: string
   theme?: string
@@ -205,13 +207,34 @@ export async function runMigrate(options: MigrateOptions) {
     }
   }
 
+  // Step 0 (optional): Load MySQL dump for richer metadata
+  const dbPath = options.db ? resolve(options.db) : undefined
+  let dbData: Awaited<ReturnType<typeof readWPDatabase>> | undefined
+  if (dbPath) {
+    if (!existsSync(dbPath)) {
+      console.error(chalk.red(`Database file not found: ${dbPath}`))
+      process.exit(1)
+    }
+    const dbSpinner = ora('Reading WordPress database dump…').start()
+    try {
+      dbData = await readWPDatabase(dbPath)
+      const postMetaCount = Array.from(dbData.postMeta.values()).reduce((s: number, m) => s + Object.keys(m).length, 0)
+      dbSpinner.succeed(
+        `Database: ${dbData.users.size} users, ${dbData.postMeta.size} posts with meta (${postMetaCount} entries)`
+      )
+    } catch (err) {
+      dbSpinner.fail(`DB read failed: ${err instanceof Error ? err.message : String(err)}`)
+      process.exit(1)
+    }
+  }
+
   // Step 1: Parse WXR for site metadata + navigation
   const parseSpinner = ora('Reading WordPress export…').start()
   let wpExport: Awaited<ReturnType<typeof parseWPExport>>
   let xmlContent: string
   try {
     xmlContent = await readFile(inputFile, 'utf-8')
-    wpExport = await parseWPExport(inputFile)
+    wpExport = await parseWPExport(inputFile, dbData)
     const postCount = wpExport.posts.filter((p) => p.status === 'publish' && p.type === 'post').length
     const pageCount = wpExport.posts.filter((p) => p.type === 'page').length
     parseSpinner.succeed(

@@ -1,5 +1,7 @@
 // WordPress Migration Engine
 export { parseWPExport } from './parser.js'
+export { readWPDatabase } from './db-reader.js'
+export type { WPDBData } from './db-reader.js'
 export { transformPosts } from './transform.js'
 export { generateKeystaticConfig } from './generate-config.js'
 export { migrateMedia } from './media.js'

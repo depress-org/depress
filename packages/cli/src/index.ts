@@ -25,6 +25,7 @@ program
   .description('Migrate WordPress site to Astro + Keystatic (full pipeline)')
   .option('-i, --input <path>', 'Path to WordPress XML export file')
   .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (for local image serving)')
+  .option('--db <path>', 'WordPress MySQL dump (.sql) — enables Yoast SEO, ACF fields, author profiles')
   .option('-o, --output <path>', 'Output directory', './output')
   .option('--repo <owner/repo>', 'GitHub repo for Keystatic config (e.g. my-org/my-blog)')
   .option('-t, --theme <id>', 'Astro theme (default: astrowind | scaffold for Keystatic-only | rocket|brook|daisyui|mainline|small-biz)', 'astrowind')

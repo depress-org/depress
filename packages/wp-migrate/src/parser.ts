@@ -1,11 +1,14 @@
 import type { WPExport, WPPost, WPCategory, WPTag } from '@depress-org/core'
 import { XMLParser } from 'fast-xml-parser'
 import { readFile } from 'fs/promises'
+import type { WPDBData } from './db-reader.js'
 
 /**
- * Parse WordPress XML export file into structured data
+ * Parse WordPress XML export file into structured data.
+ * Pass `dbData` (from readWPDatabase) to augment with Yoast SEO,
+ * featured images, and ACF custom fields from the SQL dump.
  */
-export async function parseWPExport(xmlPath: string): Promise<WPExport> {
+export async function parseWPExport(xmlPath: string, dbData?: WPDBData): Promise<WPExport> {
   const xml = await readFile(xmlPath, 'utf-8')
   const parser = new XMLParser({
     ignoreAttributes: false,
@@ -21,8 +24,8 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
     throw new Error('Invalid WordPress export XML: missing channel element')
   }
 
-  const siteTitle = channel.title ?? 'Untitled'
-  const siteUrl = channel.link ?? ''
+  let siteTitle = channel.title ?? 'Untitled'
+  let siteUrl = channel.link ?? ''
   const items: any[] = channel.item ?? []
 
   const posts: WPPost[] = []
@@ -108,9 +111,16 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
       }
     }
 
-    const featuredImageUrl = featuredImageId
+    let featuredImageUrl = featuredImageId
       ? attachmentUrlById.get(Number(featuredImageId))
       : undefined
+    // Resolve relative attachment URLs against the site URL
+    if (featuredImageUrl && featuredImageUrl.startsWith('/') && siteUrl) {
+      try {
+        const base = new URL(siteUrl)
+        featuredImageUrl = `${base.origin}${featuredImageUrl}`
+      } catch { /* leave as-is if siteUrl is malformed */ }
+    }
 
     posts.push({
       id: Number(item['wp:post_id']),
@@ -130,6 +140,42 @@ export async function parseWPExport(xmlPath: string): Promise<WPExport> {
       seoDescription: seoDescription || undefined,
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
     })
+  }
+
+  // Augment posts with DB data (Yoast SEO, ACF, featured image) when available
+  if (dbData) {
+    for (const post of posts) {
+      const meta = dbData.postMeta.get(post.id)
+      if (!meta) continue
+
+      // Yoast SEO — DB takes priority over WXR (covers pages and custom post types too)
+      if (!post.seoTitle && meta['_yoast_wpseo_title']) post.seoTitle = meta['_yoast_wpseo_title']
+      if (!post.seoDescription && meta['_yoast_wpseo_metadesc']) post.seoDescription = meta['_yoast_wpseo_metadesc']
+
+      // Featured image from DB (resolves when WXR attachment was missing)
+      if (!post.featuredImageId && meta['_thumbnail_id']) {
+        post.featuredImageId = meta['_thumbnail_id']
+        const url = attachmentUrlById.get(Number(meta['_thumbnail_id']))
+        if (url) {
+          post.featuredImageUrl = url.startsWith('/') && siteUrl
+            ? (() => { try { return new URL(siteUrl).origin + url } catch { return url } })()
+            : url
+        }
+      }
+
+      // ACF and public custom fields from DB (richer than WXR)
+      const dbCustom: Record<string, string> = {}
+      for (const [key, val] of Object.entries(meta)) {
+        if (!key.startsWith('_') && val) dbCustom[key] = val
+      }
+      if (Object.keys(dbCustom).length > 0) {
+        post.customFields = { ...dbCustom, ...(post.customFields ?? {}) }
+      }
+    }
+
+    // Use DB blogname/description as site metadata fallback
+    if (!siteTitle && dbData.options.blogname) siteTitle = dbData.options.blogname
+    if (!siteUrl && dbData.options.siteurl) siteUrl = dbData.options.siteurl
   }
 
   return {
