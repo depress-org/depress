@@ -25,13 +25,14 @@ $20-50/month           →        $0/month. Forever.
 
 ## What gets migrated
 
-- **All posts** — with frontmatter (title, date, category, tags, excerpt, cover image)
+- **All posts** — title, date, author, category, tags, excerpt, SEO meta (Yoast)
 - **All pages** — including parent/child hierarchy
 - **Navigation** — parsed from your WP menus, converted to working links
-- **Media** — images copied to `/public/media/`, links rewritten automatically
+- **Media** — images downloaded and copied to `/public/media/`, links rewritten
+- **Redirects** — `redirects.json` + `_redirects` (Netlify/Cloudflare format) with 301 entries for every old URL
 - **Categories & tags** — with their own archive pages
-- **Keystatic config** — generated with all your collections pre-wired
-- **Complete Astro project** — ready to `npm start` and see your blog in the browser
+- **Visual CMS** — Keystatic admin pre-wired to your content, no git knowledge needed
+- **Complete Astro project** — pick a theme, run `npm install && npm run dev`, done
 
 ## Quick start
 
@@ -154,6 +155,20 @@ npm start
 
 </details>
 
+## Themes
+
+depress ships two bundled themes — no download at migration time, fully tested:
+
+| Theme | Stack | Best for |
+|-------|-------|----------|
+| `astrowind` *(default)* | Astro 5 + Tailwind CSS | Marketing sites, blogs, SaaS |
+| `rocket` | Astro 6 + Tailwind CSS 4 | Personal blogs, portfolios |
+
+```bash
+npx @depress-org/depress migrate --theme astrowind   # default
+npx @depress-org/depress migrate --theme rocket
+```
+
 ## Options
 
 ```
@@ -162,6 +177,7 @@ depress migrate [options]
   -i, --input <path>    WordPress XML export file
   -d, --wp-dir <path>   WordPress public_html directory (for local media)
   -o, --output <path>   Output directory (default: ./output)
+  -t, --theme <id>      Theme to use: astrowind (default) | rocket | scaffold
 
 depress init            Create a new blank Astro + Keystatic blog (interactive)
 ```
@@ -205,10 +221,10 @@ output/
 PRs welcome! This is a monorepo — see [CLAUDE.md](CLAUDE.md) for build commands and architecture notes.
 
 Good first issues to tackle:
-- [ ] `migrateMedia` in `packages/wp-migrate/src/media.ts` — currently a stub, needs to copy `wp-content/uploads/` and rewrite image URLs
-- [ ] `depress init` scaffolding — interactive new-blog wizard
+- [ ] `depress init` — interactive new-blog wizard (currently scaffolds a placeholder)
 - [ ] `depress deploy` — Cloudflare Pages deploy automation
-- [ ] Tests — there are none yet
+- [ ] Tests — there are none yet; vitest is the obvious choice
+- [ ] `--db <path>` flag — parse a MySQL dump to extract ACF fields and full Yoast meta (see [ROADMAP.md](ROADMAP.md))
 
 ## Sponsoring
 
