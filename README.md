@@ -2,6 +2,9 @@
 
 > *De-press yourself.* Migrate any WordPress blog to **Astro + Keystatic** in minutes. Free hosting forever.
 
+> [!IMPORTANT]
+> This project is **new** and currently a **work in progress**.
+
 [![npm](https://img.shields.io/npm/v/%40depress-org%2Fdepress)](https://npmjs.com/package/@depress-org/depress)
 [![CI](https://github.com/depress-org/depress/actions/workflows/ci.yml/badge.svg)](https://github.com/depress-org/depress/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/depress-org/depress)](LICENSE)
