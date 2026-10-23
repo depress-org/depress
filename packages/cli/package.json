@@ -12,6 +12,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./commands/deploy": {
+      "types": "./dist/commands/deploy.d.ts",
+      "import": "./dist/commands/deploy.js"
+    },
+    "./commands/check": {
+      "types": "./dist/commands/check.d.ts",
+      "import": "./dist/commands/check.js"
+    },
+    "./commands/migrate": {
+      "types": "./dist/commands/migrate.d.ts",
+      "import": "./dist/commands/migrate.js"
     }
   },
   "files": [
