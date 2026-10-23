@@ -32,3 +32,18 @@ jobs:
 
       - name: Run tests
         run: npm run test --workspaces --if-present
+
+      - name: Run tests with coverage (best-effort)
+        # Coverage config lands via qa task t_912a3e7a (vitest --coverage setup,
+        # coverage baseline). Non-blocking until that config exists everywhere,
+        # so this step must never fail the required CI job.
+        continue-on-error: true
+        run: npm run test --workspaces --if-present -- --coverage
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: true

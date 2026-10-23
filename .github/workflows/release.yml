@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "publish" to confirm publishing to npm'
+        required: true
+        default: ""
+
+jobs:
+  build-and-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require explicit confirmation for manual dispatch
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm != 'publish'
+        run: |
+          echo "Manual dispatch requires input 'confirm' set to the literal word 'publish'." >&2
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build all packages
+        run: npm run build --workspaces --if-present
+
+      - name: Run full test suite
+        run: npm run test --workspaces --if-present
+
+  publish:
+    name: Publish to npm
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    # Manual approval gate: this environment must have required reviewers
+    # configured in repo Settings -> Environments -> npm-publish.
+    environment: npm-publish
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build all packages
+        run: npm run build --workspaces --if-present
+
+      - name: Publish @depress-org/core
+        run: npm publish --workspace packages/core --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @depress-org/wp-migrate
+        run: npm publish --workspace packages/wp-migrate --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish depress CLI (@depress-org/depress)
+        run: npm publish --workspace packages/cli --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
