@@ -53,10 +53,18 @@ program
 
 program
   .command('deploy')
-  .description('Deploy site to Cloudflare Pages')
-  .action(async () => {
+  .description('Deploy site to Cloudflare Pages (or Netlify/Vercel)')
+  .option('-d, --dir <path>', 'Directory to build & deploy', '.')
+  .option(
+    '-t, --target <target>',
+    'Deploy target: cloudflare-pages | netlify | vercel',
+    'cloudflare-pages',
+  )
+  .option('--token <token>', 'API token for the deploy target (overrides env var)')
+  .option('--project-name <name>', 'Project/site name for the deploy target')
+  .action(async (options) => {
     const { runDeploy } = await import('./commands/deploy.js')
-    await runDeploy()
+    await runDeploy(options)
   })
 
 program
