@@ -289,7 +289,12 @@ export async function runMigrate(options: MigrateOptions) {
   try {
     await mkdir(contentDest, { recursive: true })
     const categoryNames = new Map(wpExport.categories.map((c) => [c.slug, c.name]))
-    transformResult = await transformWp2mdOutput({ wp2mdDir: wp2mdOut, outputDir: contentDest, categoryNames })
+    const authorsBySlug = new Map(
+      wpExport.posts
+        .filter((p: { author?: string }) => p.author && p.author.trim())
+        .map((p: { slug: string; author: string }) => [p.slug, p.author] as const),
+    )
+    transformResult = await transformWp2mdOutput({ wp2mdDir: wp2mdOut, outputDir: contentDest, categoryNames, authorsBySlug })
     transformSpinner.succeed(
       `Transformed: ${chalk.green(String(transformResult.postsTransformed))} articles, ` +
       `${chalk.green(String(transformResult.pagesTransformed))} pages, ` +
