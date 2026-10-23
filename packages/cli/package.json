@@ -39,7 +39,8 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "wordpress",
@@ -78,6 +79,7 @@
   "devDependencies": {
     "@types/inquirer": "^9.0.0",
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^4.1.5",
     "typescript": "^5.4.0",
     "vitest": "^4.1.5"
   },
