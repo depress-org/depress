@@ -10,6 +10,9 @@ export interface TransformOptions {
   outputDir: string
   /** Category slug → display name map for human-readable labels in frontmatter */
   categoryNames?: Map<string, string>
+  /** Post slug → author display name map, derived from WPPost.author (dc:creator). wp2md's own
+   *  markdown frontmatter does not carry author, so it must be supplied separately. */
+  authorsBySlug?: Map<string, string>
 }
 
 export interface TransformResult {
@@ -73,13 +76,19 @@ function rewriteImagePaths(body: string): string {
   return out
 }
 
-function buildArticleFrontmatter(raw: Record<string, unknown>, body: string): Record<string, unknown> {
+function buildArticleFrontmatter(
+  raw: Record<string, unknown>,
+  body: string,
+  author?: string,
+): Record<string, unknown> {
   const fm: Record<string, unknown> = {}
 
   fm.title = raw.title ?? 'Untitled'
 
   const date = normaliseDate(raw.date)
   if (date) fm.publishedAt = date
+
+  if (author && author.trim()) fm.author = author.trim()
 
   const category = pickOne(raw.categories)
   if (category) fm.category = category
@@ -158,12 +167,13 @@ function uniqueFilename(name: string, srcPath: string, existing: Map<string, str
 async function transformMarkdownFile(
   srcPath: string,
   destPath: string,
-  fmBuilder: (raw: Record<string, unknown>, body: string) => Record<string, unknown>,
+  fmBuilder: (raw: Record<string, unknown>, body: string, author?: string) => Record<string, unknown>,
+  author?: string,
 ): Promise<void> {
   const raw = await readFile(srcPath, 'utf-8')
   const { data, content } = matter(raw)
 
-  const updatedFm = fmBuilder(data, content)
+  const updatedFm = fmBuilder(data, content, author)
   const updatedBody = rewriteImagePaths(content)
 
   // Stringify back with gray-matter
@@ -179,9 +189,10 @@ async function walkTypeDir(
   typeDir: string,          // e.g. .tmp/wp2md/posts
   contentDir: string,       // e.g. output/src/content/articles
   mediaDir: string,         // e.g. output/public/media
-  fmBuilder: (raw: Record<string, unknown>, body: string) => Record<string, unknown>,
+  fmBuilder: (raw: Record<string, unknown>, body: string, author?: string) => Record<string, unknown>,
   imageRegistry: Map<string, string>,
   isDraft = false,
+  authorsBySlug?: Map<string, string>,
 ): Promise<{ transformed: number; imagesCopied: number; imageFailed: string[] }> {
   let transformed = 0
   let imagesCopied = 0
@@ -205,7 +216,7 @@ async function walkTypeDir(
     const srcMd = join(srcSlugDir, mdFile.name)
     const destMd = join(contentDir, slug, 'index.mdoc')
 
-    await transformMarkdownFile(srcMd, destMd, fmBuilder)
+    await transformMarkdownFile(srcMd, destMd, fmBuilder, authorsBySlug?.get(slug))
     transformed++
 
     // Copy images from posts/slug/images/ → public/media/
@@ -221,7 +232,7 @@ async function walkTypeDir(
 // ── Main transform entry point ───────────────────────────────────────────────
 
 export async function transformWp2mdOutput(options: TransformOptions): Promise<TransformResult> {
-  const { wp2mdDir, outputDir, categoryNames } = options
+  const { wp2mdDir, outputDir, categoryNames, authorsBySlug } = options
 
   const articlesDir = join(outputDir, 'src', 'content', 'articles')
   const pagesDir = join(outputDir, 'src', 'content', 'pages')
@@ -234,8 +245,8 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
   // Shared image registry to detect filename collisions across all posts+pages
   const imageRegistry = new Map<string, string>()
 
-  const articleFmBuilder = (raw: Record<string, unknown>, body: string) => {
-    const fm = buildArticleFrontmatter(raw, body)
+  const articleFmBuilder = (raw: Record<string, unknown>, body: string, author?: string) => {
+    const fm = buildArticleFrontmatter(raw, body, author)
     if (categoryNames && typeof fm.category === 'string') {
       fm.category = categoryNames.get(fm.category) ?? fm.category
     }
@@ -249,6 +260,8 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
     mediaDir,
     articleFmBuilder,
     imageRegistry,
+    false,
+    authorsBySlug,
   )
 
   // Transform draft posts
@@ -259,6 +272,7 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
     articleFmBuilder,
     imageRegistry,
     true,
+    authorsBySlug,
   )
 
   // Transform pages
