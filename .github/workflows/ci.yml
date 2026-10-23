@@ -30,7 +30,7 @@ jobs:
         # compiled dist/*.d.ts (package.json "types" points at dist), which
         # only exist after `tsc` has run once. Typechecking first produces
         # spurious TS2307 "Cannot find module" errors on a fresh checkout.
-        run: npm run build --workspaces --if-present
+        run: npm run build
 
       - name: Type-check
         run: npm run typecheck --workspaces --if-present
