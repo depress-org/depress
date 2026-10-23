@@ -16,7 +16,26 @@
 
 ---
 
-## Priority 1 — Author + featured image extraction (parser.ts)
+## Status (reconciled 2026-10-23, see kanban task t_7d7c9c50 report)
+
+| Priority | Status |
+|---|---|
+| 1 — author + featured image extraction | ✅ DONE |
+| 2 — redirect map generation | ✅ DONE |
+| 3 — image alt text from postmeta | ⚠️ PARTIAL — extracted in parser.ts but not threaded into Markdoc image output yet |
+| 4 — SEO metadata from WXR | ✅ DONE (engine + frontmatter; per-theme-adapter field mapping not re-verified) |
+| 5 — post-migration quality report | ❌ NOT DONE — `migration-report.md` is never written to disk |
+| 6 — DB import module (`--db` flag) | ✅ DONE |
+| 7 — page builder shortcode handling | ✅ DONE |
+| 8 — embedded video fallback | ✅ DONE |
+
+Remaining real work: finish Priority 3 (thread alt text into generated content)
+and Priority 5 (actually generate `migration-report.md`), plus `depress check`
+and `depress deploy`, which are still literal stubs.
+
+---
+
+## Priority 1 — Author + featured image extraction (parser.ts) ✅ DONE
 
 **Current state:** `dc:creator` (author) and `_thumbnail_id` (featured image) are never read. Author defaults to the site name; featured images are blank.
 
@@ -58,7 +77,7 @@ Also build an `attachmentsById` map so `featuredImageId` can be resolved to a UR
 
 ---
 
-## Priority 2 — Redirect map generation (migrate.ts)
+## Priority 2 — Redirect map generation (migrate.ts) ✅ DONE
 
 **Current state:** The migrate command has no redirect map output. Old WordPress URLs break silently.
 
@@ -87,9 +106,17 @@ Also write a `_redirects` file (Netlify/Cloudflare format) and inject the redire
 
 ---
 
-## Priority 3 — Image alt text from postmeta (media.ts / parser.ts)
+## Priority 3 — Image alt text from postmeta (media.ts / parser.ts) ⚠️ PARTIAL
 
-**Current state:** Alt text comes from `item.title` (the filename). The actual alt text lives in `wp:postmeta` under key `_wp_attachment_image_alt`.
+**Current state (2026-10-23):** The extraction described below IS implemented
+(`parser.ts` lines ~52-61, confirmed) — `media[].altText` is populated from
+`_wp_attachment_image_alt` with a fallback to `item.title`. What remains: that
+`altText` value has no consumer anywhere downstream — it is not threaded into
+the `![alt](url)` Markdoc image output in `transform.ts` /
+`keystatic-transform.ts`. Remaining work is wiring the already-extracted value
+into generated content, not re-doing the extraction.
+
+**Original problem statement (historical):** Alt text comes from `item.title` (the filename). The actual alt text lives in `wp:postmeta` under key `_wp_attachment_image_alt`.
 
 **Fix:** In the attachment parsing loop:
 
@@ -107,7 +134,7 @@ Then `injectContent` / `transformWp2mdOutput` can apply the correct alt text whe
 
 ---
 
-## Priority 4 — SEO metadata from WXR (parser.ts + theme adapters)
+## Priority 4 — SEO metadata from WXR (parser.ts + theme adapters) ✅ DONE (engine)
 
 **Current state:** Yoast SEO meta (`_yoast_wpseo_title`, `_yoast_wpseo_metadesc`) is ignored even though it's present in the WXR postmeta.
 
@@ -122,9 +149,14 @@ Then `injectContent` / `transformWp2mdOutput` can apply the correct alt text whe
 
 ---
 
-## Priority 5 — Post-migration quality report
+## Priority 5 — Post-migration quality report ❌ NOT DONE
 
-**Current state:** The CLI prints a count but no actionable report.
+**Current state (2026-10-23):** `MigrationReport` data model exists
+(`@depress-org/core`, built by `transformPosts` in `transform.ts`), but it is
+only used for an in-memory CLI summary — `migration-report.md` is never
+written to the output directory. Confirmed by repo-wide grep: zero
+implementation hits for "migration-report", only this spec text. Missing-alt
+and unrecognised-shortcode tracking described below do not exist yet either.
 
 **Fix:** Generate `migration-report.md` in the output directory:
 
@@ -156,7 +188,7 @@ Generated: 2026-05-04
 
 ---
 
-## Priority 6 — DB import module (`--db` flag)
+## Priority 6 — DB import module (`--db` flag) ✅ DONE
 
 The WXR file is limited: no ACF field data, no user profiles beyond `dc:creator`, no full Yoast meta for all post types, no WooCommerce data. The SQL dump has everything.
 
@@ -193,7 +225,7 @@ When `--db` is supplied, db data augments the WXR parse:
 
 ---
 
-## Priority 7 — Page builder shortcode handling (transform.ts)
+## Priority 7 — Page builder shortcode handling (transform.ts) ✅ DONE
 
 **Current state:** `[et_pb_section]`, `[vc_row]`, `[fusion_builder_container]` and all other shortcodes are silently deleted. Content from Elementor/Divi/WPBakery vanishes.
 
@@ -235,7 +267,7 @@ function handleShortcodes(html: string): { content: string; warnings: string[] }
 
 ---
 
-## Priority 8 — Embedded video fallback (transform.ts)
+## Priority 8 — Embedded video fallback (transform.ts) ✅ DONE
 
 **Current state:** YouTube/Vimeo iframes are converted to nothing by Turndown.
 
