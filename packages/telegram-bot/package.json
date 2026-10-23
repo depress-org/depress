@@ -1,0 +1,34 @@
+{
+  "name": "@depress-org/telegram-bot",
+  "version": "0.1.0",
+  "description": "depress Telegram bot: upload WXR -> pick theme -> migrate -> deploy via chat, reusing @depress-org/job-core (staging/local only, no billing yet)",
+  "type": "module",
+  "private": true,
+  "main": "./dist/bot.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/bot.ts",
+    "start": "node dist/bot.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@depress-org/job-core": "*",
+    "@depress-org/wp-migrate": "*",
+    "grammy": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/depress-org/depress.git",
+    "directory": "packages/telegram-bot"
+  },
+  "engines": { "node": ">=18.0.0" }
+}
