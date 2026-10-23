@@ -24,16 +24,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Build all packages
+      - name: Build all packages (dependency order)
         # Build must run before typecheck: @depress-org/core and
         # @depress-org/wp-migrate are consumed by sibling packages via their
-        # compiled dist/*.d.ts (package.json "types" points at dist), which
-        # only exist after `tsc` has run once. Typechecking first produces
-        # spurious TS2307 "Cannot find module" errors on a fresh checkout.
+        # compiled dist/*.d.ts, which only exist after `tsc` has run once.
         run: npm run build
 
       - name: Type-check
-        run: npm run typecheck --workspaces --if-present
+        run: npm run typecheck
 
       - name: Run tests
         run: npm run test --workspaces --if-present
