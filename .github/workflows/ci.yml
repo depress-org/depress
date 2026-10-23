@@ -25,6 +25,9 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Build all packages (dependency order)
+        # Build must run before typecheck: @depress-org/core and
+        # @depress-org/wp-migrate are consumed by sibling packages via their
+        # compiled dist/*.d.ts, which only exist after `tsc` has run once.
         run: npm run build
 
       - name: Type-check

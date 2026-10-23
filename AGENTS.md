@@ -11,7 +11,7 @@
 - Pipeline pieces (implemented unless marked):
   - ✅ Parse WXR XML: `parseWPExport` in `packages/wp-migrate/src/parser.ts`
   - ✅ Transform posts/pages to `index.mdoc`: `transformPosts` in `packages/wp-migrate/src/transform.ts` — only `publish`-status posts migrate
-  - 🚧 Media migration: `packages/wp-migrate/src/media.ts` — **stub/TODO**, returns empty map
+  - ✅ Media migration: `packages/wp-migrate/src/media.ts` — implemented (58 lines)
   - ✅ Keystatic config codegen: `packages/wp-migrate/src/generate-config.ts`
   - ✅ Rollback output dirs: `packages/wp-migrate/src/rollback.ts` — accepts scope `'all' | 'articles' | 'pages' | 'media'`
 - Current CLI commands in `packages/cli/src/commands/*` are mostly scaffolds; `migrate`, `init`, `deploy`, `check` are not fully wired to engine yet.
