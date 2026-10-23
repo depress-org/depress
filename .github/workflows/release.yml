@@ -36,11 +36,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Build all packages
+        run: npm run build
+
       - name: Type-check
         run: npm run typecheck
-
-      - name: Build all packages
-        run: npm run build --workspaces --if-present
 
       - name: Run full test suite
         run: npm run test --workspaces --if-present
@@ -68,7 +68,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Build all packages
-        run: npm run build --workspaces --if-present
+        run: npm run build
 
       - name: Publish @depress-org/core
         run: npm publish --workspace packages/core --access public
