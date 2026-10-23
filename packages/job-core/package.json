@@ -1,0 +1,39 @@
+{
+  "name": "@depress-org/job-core",
+  "version": "0.1.0",
+  "description": "Shared upload -> migrate -> deploy job orchestration used by packages/web and packages/telegram-bot",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@depress-org/core": "*",
+    "@depress-org/depress": "*",
+    "@depress-org/wp-migrate": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/depress-org/depress.git",
+    "directory": "packages/job-core"
+  },
+  "engines": { "node": ">=18.0.0" }
+}
