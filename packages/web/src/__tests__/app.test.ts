@@ -10,12 +10,13 @@ import { InMemoryJobStore } from '@depress-org/job-core'
 import { createApp, type AppOptions } from '../app.js'
 const identities = [{ token: 'a'.repeat(32), ownerId: 'alice' }, { token: 'b'.repeat(32), ownerId: 'bob' }]
 const auth = (owner = 0) => ({ Authorization: `Bearer ${identities[owner].token}` })
+const wxr = '<rss><channel><wp:wxr_version>1.2</wp:wxr_version></channel></rss>'
 let root: string, store: InMemoryJobStore
 let serial = 0
 function setup(options: AppOptions = {}) { return createApp({ identities, store, uploadRoot: root, ...options }) }
 function form(extra: Record<string, string> = {}) {
   const fd = new FormData()
-  fd.set('wxr', new File(['<rss/>'], 'anything.xml'))
+  fd.set('wxr', new File([wxr], 'anything.xml'))
   fd.set('theme', 'scaffold')
   for (const [key, value] of Object.entries(extra)) fd.set(key, value)
   return fd
@@ -104,12 +105,12 @@ describe('owner scoped admission and public reads #23', () => {
     let finish!: () => void
     runJobMock.mockImplementation(() => new Promise<void>((r) => { finish = r }))
     const fd = form()
-    fd.set('sql', new File(['-- test'], '../../dump.sql'))
+    fd.set('sql', new File(['-- MySQL dump'], '../../dump.sql'))
     const res = await post(setup(), fd)
     expect(res.status).toBe(202)
     const { job } = await res.json()
     const input = (await store.forOwner('alice').get(job.id))!.input
-    expect(await readFile(input.sqlDumpPath!, 'utf8')).toBe('-- test')
+    expect(await readFile(input.sqlDumpPath!, 'utf8')).toBe('-- MySQL dump')
     expect(input.sqlDumpPath).toMatch(/\/dump.sql$/)
     finish()
     await vi.waitFor(() => expect(existsSync(dirname(input.wxrPath))).toBe(false))
@@ -140,7 +141,7 @@ describe('owner scoped admission and public reads #23', () => {
   })
 })
 describe('streamed multipart bounds #23', () => {
-  const valid = () => multipart([['wxr', '<rss/>', true], ['theme', 'scaffold']])
+  const valid = () => multipart([['wxr', wxr, true], ['theme', 'scaffold']])
   it('accepts a fragmented upload without Content-Length', async () => {
     expect((await setup().request(streamRequest(valid(), {}, 1))).status).toBe(202)
   })
@@ -159,12 +160,12 @@ describe('streamed multipart bounds #23', () => {
       expect((await setup().request(streamRequest(valid(), { 'Content-Length': n }))).status).toBe(400)
   })
   it('accepts all six allowlisted parts at the count boundary', async () => {
-    const text = multipart([['wxr', 'x', true], ['sql', 'x', true], ['theme', 'scaffold'], ['mode', 'migrate-only'], ['deployTarget', 'vercel'], ['projectName', 'site']])
+    const text = multipart([['wxr', wxr, true], ['sql', '-- MySQL dump', true], ['theme', 'scaffold'], ['mode', 'migrate-only'], ['deployTarget', 'vercel'], ['projectName', 'site']])
     expect((await setup().request(streamRequest(text))).status).toBe(202)
   })
   it('accepts exact request and file byte bounds', async () => {
     const text = valid()
-    expect((await setup({ limits: { requestBytes: Buffer.byteLength(text), fileBytes: 6 } }).request(streamRequest(text))).status).toBe(202)
+    expect((await setup({ limits: { requestBytes: Buffer.byteLength(text), fileBytes: Buffer.byteLength(wxr) } }).request(streamRequest(text))).status).toBe(202)
   })
   it('rejects streamed file bytes before whole request aggregation', async () => {
     const res = await setup({ limits: { fileBytes: 6 } }).request(streamRequest(multipart([['wxr', '1234567', true], ['theme', 'scaffold']])))
@@ -183,10 +184,9 @@ describe('streamed multipart bounds #23', () => {
   })
   it('caps file/field/part counts and field bytes', async () => {
     const cases: Array<Array<[string, string, boolean?]>> = [
-      [['wxr', 'x', true], ['sql', 'x', true], ['wxr', 'x', true]],
       [['theme', 'x'.repeat(129)]],
       [['theme', 'scaffold'], ['mode', 'migrate-only'], ['deployTarget', 'vercel'], ['projectName', 'site'], ['ownerId', 'bad']],
-      [['theme', 'scaffold'], ['mode', 'migrate-only'], ['deployTarget', 'vercel'], ['projectName', 'site'], ['wxr', 'x', true], ['sql', 'x', true], ['extra', 'x']],
+      [['theme', 'scaffold'], ['mode', 'migrate-only'], ['deployTarget', 'vercel'], ['projectName', 'site'], ['wxr', 'x', true], ['sql', 'x', true], ['media', 'x', true], ['extra', 'x']],
     ]
     for (const parts of cases) expect((await setup().request(streamRequest(multipart(parts)))).status).toBe(413)
     expect(existsSync(root)).toBe(false)

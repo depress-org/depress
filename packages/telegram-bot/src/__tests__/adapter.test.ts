@@ -42,7 +42,7 @@ async function update(kind: string, value = '', user = 42, type = 'private') {
 const text = () => calls.filter(c => c.method === 'sendMessage').map(c => c.payload.text).join('\n')
 const callback = () => calls.filter(c => c.method === 'sendMessage').at(-1)!.payload.reply_markup.inline_keyboard[0][0].callback_data as string
 const tick = () => new Promise(r => setTimeout(r, 10))
-async function ready() { await update('doc', 'export.xml'); await update('skip'); return callback() }
+async function ready() { await update('doc', 'export.xml'); await update('skip'); await update('skip'); return callback() }
 beforeEach(async () => {
   await mkdir(resolve('.tmp'), { recursive: true }); root = await mkdtemp(resolve('.tmp/bot-test-'))
   apiFailure = ''; apiGate = undefined
@@ -54,6 +54,54 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); await rm(root, { recursive: true, force: true }) })
 
 describe('real grammy adapter, offline API transport', () => {
+  it('has explicit optional media stage, never misparses ZIP as SQL, and passes validated files to owner job', async () => {
+    await update('doc', 'export.xml')
+    await update('doc', 'uploads.zip')
+    expect(sessions.get('42:42').stage).toBe('awaiting_sql')
+    await update('skip')
+    expect(sessions.get('42:42').stage).toBe('awaiting_media')
+    fetchMock.mockResolvedValue(new Response(await readFile(resolve('../../fixtures/media-archive/uploads.zip'))))
+    await update('doc', '../../uploads.zip')
+    expect(sessions.get('42:42').stage).toBe('awaiting_theme')
+    const dir = sessions.get('42:42').mediaDir!
+    expect(await readFile(join(dir, 'wp-content/uploads/2026/10/photo.png'))).toEqual(await readFile(resolve('../../fixtures/media-archive/photo.png')))
+    vi.mocked(runJob).mockImplementation(async (scope, jobId) => {
+      const job = (await scope.get(jobId))!
+      expect(job.input.mediaDir).toBe(dir); expect(scope.ownerId).toBe('telegram:42')
+      return scope.update(jobId, { status: 'done' })
+    })
+    await update('callback', callback())
+    await expect.poll(() => readdir(root)).toEqual([])
+  })
+  it('rejects truncated media and wrong-role content, stays retryable, cleans on abandonment', async () => {
+    await update('doc', 'export.xml'); await update('skip')
+    expect(sessions.get('42:42').stage).toBe('awaiting_media')
+    for (const bytes of [wxr, '-- MySQL dump', 'PK truncated']) {
+      fetchMock.mockResolvedValue(new Response(bytes)); await update('doc', 'uploads.zip')
+      expect(sessions.get('42:42').stage).toBe('awaiting_media')
+      expect(await readdir(sessions.get('42:42').uploadDir!)).toEqual(['source.xml'])
+    }
+    expect(runJob).not.toHaveBeenCalled()
+    await update('start'); await expect.poll(() => readdir(root)).toEqual([])
+  })
+  it('does not let late media extraction clobber /start and cleans only its stale upload', async () => {
+    await update('doc', 'export.xml'); await update('skip')
+    apiGate = deferred()
+    fetchMock.mockResolvedValue(new Response(await readFile(resolve('../../fixtures/media-archive/uploads.zip'))))
+    const uploading = update('doc', 'uploads.zip'); await tick()
+    await update('start')
+    apiGate.resolve({ ok: true, result: { file_path: 'documents/file.zip' } }); await uploading
+    expect(sessions.get('42:42').stage).toBe('idle')
+    await expect.poll(() => readdir(root)).toEqual([])
+    expect(runJob).not.toHaveBeenCalled()
+  })
+  it('expires optional-media stage and supports two explicit skips without a media success claim', async () => {
+    setup({ sessionTtlMs: 20 }); await update('doc', 'export.xml'); await update('skip')
+    expect(sessions.get('42:42').stage).toBe('awaiting_media')
+    await new Promise(r => setTimeout(r, 60)); await expect.poll(() => readdir(root)).toEqual([])
+    setup(); await update('doc', 'export.xml'); await update('skip'); await update('skip')
+    expect(sessions.get('42:42').stage).toBe('awaiting_theme'); expect(sessions.get('42:42').mediaDir).toBeUndefined()
+  })
   it('fails closed without access config; rejects groups and other senders before any IO', async () => {
     setup({ allowedUserIds: [] }); await update('doc', 'x.xml'); expect(calls).toEqual([])
     setup(); await update('doc', 'x.xml', 43); await update('doc', 'x.xml', 42, 'group'); await update('callback', 'theme:scaffold', 43)
@@ -88,7 +136,7 @@ describe('real grammy adapter, offline API transport', () => {
       return scope.update(jobId, { status: 'done' })
     })
     const a = await ready()
-    await update('doc', 'b.xml', 43); await update('skip', '', 43); const b = callback()
+    await update('doc', 'b.xml', 43); await update('skip', '', 43); await update('skip', '', 43); const b = callback()
     await update('callback', a, 43) // A's keyboard is not B's session generation.
     expect(runJob).not.toHaveBeenCalled()
     await update('callback', a); await update('callback', b, 43); await tick()
@@ -122,7 +170,7 @@ describe('real grammy adapter, offline API transport', () => {
   it('rejects unnamed and wrong-role/media files before downloading', async () => {
     await update('doc', ''); await update('doc', 'media.zip'); expect(fetchMock).not.toHaveBeenCalled()
     await update('doc', 'x.xml'); fetchMock.mockClear(); await update('doc', 'media.zip'); await update('doc', 'x.xml')
-    expect(fetchMock).not.toHaveBeenCalled(); expect(text()).toContain('SQL'); expect(text()).toContain('not supported')
+    expect(fetchMock).not.toHaveBeenCalled(); expect(text()).toContain('SQL'); expect(text()).toContain('next media stage')
   })
   it.each(['getFile', 'fetch', 'http', 'content', 'oversize'])('recovers and cleans uploads after %s failure', async failure => {
     if (failure === 'getFile') apiFailure = 'getFile'
@@ -145,6 +193,7 @@ describe('real grammy adapter, offline API transport', () => {
     await update('doc', 'x.xml'); fetchMock.mockResolvedValue(new Response(wxr)); await update('doc', 'dump.sql')
     expect(text()).toContain('Upload failed'); expect(await readdir(root)).toHaveLength(1)
     fetchMock.mockResolvedValue(new Response('-- MySQL dump\nCREATE TABLE wp_posts (id int);')); await update('doc', 'dump.sql')
+    expect(sessions.get('42:42').stage).toBe('awaiting_media'); await update('skip')
     expect(text()).toContain('Pick a theme')
   })
   it('does not accept old keyboard callbacks in a newer session', async () => {
@@ -155,7 +204,7 @@ describe('real grammy adapter, offline API transport', () => {
     apiGate = deferred(); const first = update('doc', 'x.xml'); await tick(); await update('doc', 'x.xml')
     expect(calls.filter(c => c.method === 'getFile')).toHaveLength(1)
     apiGate.resolve({ ok: true, result: { file_path: 'documents/file.xml' } }); await first; apiGate = undefined
-    await update('skip'); const cb = callback(); await Promise.all([update('callback', cb), update('callback', cb)]); await tick()
+    await update('skip'); await update('skip'); const cb = callback(); await Promise.all([update('callback', cb), update('callback', cb)]); await tick()
     expect(runJob).toHaveBeenCalledTimes(1)
   })
   it('does not let a late download clobber /start and cleans its stale directory', async () => {
@@ -168,7 +217,7 @@ describe('real grammy adapter, offline API transport', () => {
     vi.mocked(runJob).mockImplementation(async (s, jobId, opts) => { job = await s.get(jobId); progress = opts!.onProgress; return jobGate.promise })
     const cb = await ready(); await update('callback', cb); await tick(); await update('start'); await update('doc', 'new.xml')
     apiFailure = 'sendMessage'; await progress({ ...job, status: 'migrating' }); jobGate.resolve({ ...job, status: 'failed', error: 'private raw path' }); await tick(); await tick()
-    expect(await readdir(root)).toHaveLength(1); apiFailure = ''; await update('skip'); expect(text()).toContain('Pick a theme')
+    expect(await readdir(root)).toHaveLength(1); apiFailure = ''; await update('skip'); await update('skip'); expect(text()).toContain('Pick a theme')
   })
   it.each(['resolved-failed', 'rejected', 'done'])('always cleans after %s with rejected queued/progress/terminal delivery', async terminal => {
     const cb = await ready(); apiFailure = 'sendMessage'

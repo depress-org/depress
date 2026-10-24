@@ -3,9 +3,12 @@ import { performance } from 'node:perf_hooks'
 import { deflateRawSync } from 'node:zlib'
 import { createRequire } from 'node:module'
 const crc32 = createRequire(import.meta.url)('buffer-crc32') as { unsigned(data: Buffer, previous?: number): number }
-import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { ingestMediaArchive } from '../media-archive.js'
+import { Readable } from 'node:stream'
+import * as yauzl from 'yauzl'
+vi.mock('yauzl', async original => { const actual = await original<typeof import('yauzl')>(); return { ...actual, fromBuffer: vi.fn(actual.fromBuffer) } })
 
 // Deliberately constructs hostile ZIPs; no shell, network or ZIP writer sanitization.
 function zip(entries: { name: string; data?: Buffer; mode?: number; method?: number; badCrc?: boolean }[]) {
@@ -33,6 +36,18 @@ const expectClean = async (bytes: Buffer, limits = {}) => {
   expect(await readdir(root)).toEqual([])
 }
 describe('shared bounded media archive ingestion', () => {
+  it('rejects symlink upload root and symlink ancestors without creating output', async () => {
+    const target = join(root, 'target'); await mkdir(target)
+    await writeFile(join(target, 'marker'), 'unchanged')
+    const link = join(root, 'link'); await symlink(target, link)
+    for (const dir of [link, join(link, 'nested')]) {
+      if (dir.endsWith('nested')) await mkdir(join(target, 'nested'))
+      await expect(ingestMediaArchive(zip([{ name: file }]), dir)).rejects.toThrow('MEDIA_ARCHIVE_INVALID')
+    }
+    expect(await readdir(target)).toEqual(['marker', 'nested'])
+    expect(await readdir(join(target, 'nested'))).toEqual([])
+    expect(await readFile(join(target, 'marker'), 'utf8')).toBe('unchanged')
+  })
   it('extracts only regular media into private owned WordPress-root layout and cleans idempotently', async () => {
     const archive = await ingestMediaArchive(zip([{ name: file }]), root)
     expect(await readFile(join(archive.mediaDir, file), 'utf8')).toBe('fixture media')
@@ -66,6 +81,19 @@ describe('shared bounded media archive ingestion', () => {
     await expectClean(zip([{ name: 'wp-content/uploads/CON.png' }]))
     await expectClean(zip([{ name: 'wp-content/uploads/x./a.png' }]))
     await expectClean(zip([{ name: 'wp-content/uploads/', mode: 0o040755 }]))
+  })
+  it('real timeout destroys an active stalled reader, awaits cleanup and leaves no late writes', async () => {
+    const original = vi.mocked(yauzl.fromBuffer).getMockImplementation()! as typeof yauzl.fromBuffer
+    const stalled = new Readable({ read() {} })
+    const spy = vi.spyOn(yauzl, 'fromBuffer').mockImplementation(((buffer: Buffer, options: import('yauzl').Options, callback: (error: Error | null, archive: import('yauzl').ZipFile) => void) => original(buffer, options, (error, archive) => {
+      if (archive) archive.openReadStream = ((_entry: unknown, cb: (error: null, stream: Readable) => void) => cb(null, stalled)) as typeof archive.openReadStream
+      callback(error, archive)
+    })) as typeof yauzl.fromBuffer)
+    try {
+      await expectClean(zip([{ name: file }]), { timeoutMs: 100 })
+      expect(stalled.destroyed).toBe(true)
+      await new Promise(r => setTimeout(r, 20)); expect(await readdir(root)).toEqual([])
+    } finally { spy.mockRestore(); stalled.destroy() }
   })
   it('enforces elapsed deadline independently of the timer callback', async () => {
     const clock = vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValue(2)

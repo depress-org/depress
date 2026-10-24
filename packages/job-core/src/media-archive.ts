@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, open, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, open, rm, lstat } from 'node:fs/promises'
 import { extname, join, resolve, sep } from 'node:path'
 import type { Readable } from 'node:stream'
 import { performance } from 'node:perf_hooks'
@@ -95,8 +95,17 @@ export async function ingestMediaArchive(bytes: Buffer, ownedUploadDir: string, 
       const parts = name.split('/')
       for (let i = 1; i < parts.length; i++) if (names.get(parts.slice(0, i).join('/')) === false) throw invalid()
     }
+    // Operator-owned parent must already exist; never follow static symlink
+    // ancestors. Hostile concurrent filesystem mutation still requires #25 isolation.
+    const parent = resolve(ownedUploadDir)
+    for (let ancestor = parent; ; ancestor = resolve(ancestor, '..')) {
+      check()
+      const info = await lstat(ancestor)
+      if (!info.isDirectory() || info.isSymbolicLink()) throw invalid()
+      if (resolve(ancestor, '..') === ancestor) break
+    }
     check()
-    directory = await mkdtemp(join(resolve(ownedUploadDir), 'media-'))
+    directory = await mkdtemp(join(parent, 'media-'))
     const root = directory; let expanded = 0
     for (const entry of entries) {
       check()
