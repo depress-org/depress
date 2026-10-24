@@ -20,6 +20,9 @@ export async function verifyGeneratedMalformedShortcodeEvidence(root) {
     // Same first paragraph: generated excerpts must not become a second leak,
     // and neither an entire safe paragraph nor ordinary inner prose may vanish.
     `First body marker alpha. [contact-form password="${sentinel}] Inner safe prose.[/contact-form] Tail safe prose.</p>`,
+    // H2 is prose loss, NOT the H1 attribute publication defect. A balanced
+    // multiline boundary and a line-leading review comment must not eat prose.
+    ...[1, 2].map(breaks => `First body marker alpha.</p>[unknown-widget${'\n'.repeat(breaks)}internal="${sentinel}"]Safe inner prose.[/unknown-widget]<p>Safe tail prose.</p>`),
   ]
   for (const enabled of [false, true]) for (const [index, body] of cases.entries()) {
     const input = join(dir, `input-${enabled}-${index}.xml`)
@@ -38,10 +41,13 @@ export async function verifyGeneratedMalformedShortcodeEvidence(root) {
       // Turndown can escape underscores: a raw substring check alone is invalid.
       assert(!markdown.replace(/\\([_\[\]])/g, '$1').includes(sentinel))
       assert(!markdown.includes('password'))
+      assert(!markdown.includes('internal='))
       assert.match(markdown, /<!-- depress review [a-f0-9]{64} -->/)
       const manifest = JSON.parse(await readFile(join(output, 'source-manifest.json'), 'utf8'))
       assert(manifest.items.find(i => i.id === 101).content.includes(sentinel))
       const report = JSON.parse(await readFile(join(output, 'migration-report.json'), 'utf8'))
+      assert.equal(report.items.find(i => i.id === 101).status, 'failed')
+      assert.equal(report.qualityPassed, false)
       assert(!JSON.stringify(report.compatibility).includes(sentinel))
       assert(report.compatibility.occurrences.every(o => o.outcome === 'not-preserved'))
       assert(report.compatibility.diagnostics.some(d => d.code === 'WP_DYNAMIC_UNSUPPORTED'))
@@ -54,14 +60,18 @@ export async function verifyGeneratedMalformedShortcodeEvidence(root) {
       assert(article, 'missing actual rendered body container')
       assert(article.includes('First body marker alpha.'))
       if (index === 1) for (const prose of ['Inner safe prose.', 'Tail safe prose.']) assert(article.includes(prose), `lost ${prose}`)
+      if (index >= 2) for (const prose of ['Safe inner prose.', 'Safe tail prose.']) assert(article.includes(prose), `lost ${prose}`)
       assert(!html.includes(sentinel), 'attribute leaked into actual HTML/excerpt')
       assert(!html.includes('password='))
       for (const area of ['public', 'dist']) {
         for (const file of await readdir(join(output, area), { recursive: true, withFileTypes: true })) {
-          if (file.isFile()) assert(!(await readFile(join(file.parentPath, file.name))).includes(Buffer.from(sentinel)), `${area}/${file.name}: private attribute published`)
+          if (file.isFile()) {
+            assert(!['source-manifest.json', 'migration-report.json', 'migration-report.md'].includes(file.name), `${area}/${file.name}: private report published`)
+            assert(!(await readFile(join(file.parentPath, file.name))).includes(Buffer.from(sentinel)), `${area}/${file.name}: private attribute published`)
+          }
         }
       }
     }
   }
-  console.log(`#30 malformed attribute actual renderer: default-empty/enabled x exact/same-paragraph x service/CLI (8 builds) PASS: ${dir}`)
+  console.log(`#30 malformed attribute actual renderer: H1 exact/same-paragraph (8 builds) + H2 one/two-newline (8 builds), default-empty/enabled x service/CLI (16 builds) PASS: ${dir}`)
 }

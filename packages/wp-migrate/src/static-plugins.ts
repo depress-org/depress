@@ -80,7 +80,12 @@ export function createStaticPluginHost(manifest: SourceManifest, value?: unknown
       let markdown = normalizedMarkdown
       for (const token of tokens) {
         if (markdown.split(token.marker).length !== 2) throw new StaticPluginError('PLUGIN_OUTPUT_REJECTED')
-        markdown = markdown.replace(token.marker, () => replacements.find(r => r.tokenId === token.tokenId)?.markdown ?? `<!-- depress review ${token.tokenId} -->`)
+        // A line-leading HTML comment is a Markdown block: following same-line
+        // prose can be swallowed by the actual renderer until a blank line.
+        // Serialize opaque review boundaries as isolated blocks, not attributes
+        // or a regex rewrite over arbitrary source text. Owned plugin output is
+        // unchanged; unresolved content still fails the canonical quality gate.
+        markdown = markdown.replace(token.marker, () => replacements.find(r => r.tokenId === token.tokenId)?.markdown ?? `\n\n<!-- depress review ${token.tokenId} -->\n\n`)
       }
       return { markdown, replacements, diagnostics }
     },

@@ -245,6 +245,11 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
       continue
     }
     if (!['post', 'page'].includes(source.type)) { item.status = 'unsupported'; finding(item.findings, 'unsupported-type', `Published ${source.type} is unsupported`); continue }
+    if (source.type === 'page' && !layout.pagesDir) {
+      item.status = 'unsupported'
+      finding(item.findings, 'unsupported-page', `Published page ${source.id} has no supported page output adapter or route in this layout`)
+      continue
+    }
     item.status = 'failed'
     let path: string
     try { path = expectedPath(source, layout) } catch { finding(item.findings, 'unsafe-path', 'Unsafe output slug or layout'); continue }

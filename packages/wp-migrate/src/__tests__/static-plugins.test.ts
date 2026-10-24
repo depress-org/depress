@@ -29,7 +29,7 @@ describe('#30 static-plugin v1', () => {
     const prepared = host.prepare(bad).content
     expect(prepared).toBe(`DEPRESSGALLERY0 [[gallery ids="11"]] ${tokens[0].marker}`)
     const result = await host.transform(bad, prepared, media)
-    expect(result.markdown).toBe(`DEPRESSGALLERY0 [[gallery ids="11"]] <!-- depress review ${tokens[0].tokenId} -->`)
+    expect(result.markdown).toBe(`DEPRESSGALLERY0 [[gallery ids="11"]] \n\n<!-- depress review ${tokens[0].tokenId} -->\n\n`)
     expect(result.replacements).toEqual([])
     expect(result.diagnostics).toEqual([expect.objectContaining({ code: 'WP_SHORTCODE_UNRESOLVED', tokenId: tokens[0].tokenId })])
   })
@@ -63,6 +63,21 @@ describe('#30 static-plugin v1', () => {
     for (const changed of [prepared.replace(malformed.marker, ''), prepared + malformed.marker]) {
       await expect(host.transform(bad, changed, media)).rejects.toThrow('PLUGIN_OUTPUT_REJECTED')
     }
+  })
+  it.each([1, 2])('P04 owns the complete multiline boundary (%s newlines), not its inner prose', async breaks => {
+    const content = `<p>First.</p>[unknown-widget${'\n'.repeat(breaks)}internal="PRIVATE"]Safe inner prose.[/unknown-widget]<p>Tail.</p>`
+    const bad = { ...item, content }
+    const tokens = scanShortcodes(content, bad.key)
+    expect(tokens).toHaveLength(2)
+    expect(content.slice(tokens[0].start, tokens[0].end)).toBe(`[unknown-widget${'\n'.repeat(breaks)}internal="PRIVATE"]`)
+    expect(tokens[0].malformed).toBeUndefined()
+    expect(shortcodeSourceText(content, bad.key)).toBe('<p>First.</p>Safe inner prose.<p>Tail.</p>')
+    const host = createStaticPluginHost({ ...source, items: [bad] })
+    expect(host.prepare(bad).content).not.toContain('PRIVATE')
+    const result = await host.transform(bad, host.prepare(bad).content, {})
+    expect(result.markdown).not.toContain('PRIVATE')
+    expect(result.markdown).toContain('Safe inner prose.')
+    expect(result.replacements).toEqual([])
   })
   it('P09 malformed owned-looking gallery stays unowned and rolls back adjacent valid gallery', async () => {
     const bad = { ...item, content: '[gallery ids="11,12"] safe [gallery ids="PRIVATE] inner safe.' }
