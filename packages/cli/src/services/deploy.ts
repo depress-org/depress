@@ -103,6 +103,7 @@ export async function buildSite(
   const home = await workspace('build-home-')
   try {
     const env = safeEnvironment(home)
+    if (npmCommand) env.PATH += delimiter + dirname(npmCommand)
     if (!trustedNpm)
       throw new ServiceError(
         'MISSING_NPM',
