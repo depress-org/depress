@@ -35,7 +35,21 @@ for (const [name, specifier] of [
 contained(join(consumer, 'node_modules/@depress-org/depress'), await realpath(join(consumer, 'node_modules/.bin/depress')))
 if (process.argv.includes('--assert-installed')) process.exit(0)
 const { runMigrate } = await import('@depress-org/depress/commands/migrate')
-const { validateMigrationReport, provisionTheme, getThemeAdapter } = await import('@depress-org/wp-migrate')
+const { inspectMigration, validateMigrationReport, provisionTheme, getThemeAdapter } = await import('@depress-org/wp-migrate')
+
+if (process.argv.includes('--assert-default-report')) {
+  const report = JSON.parse(await readFile('default-site/migration-report.json', 'utf8'))
+  const manifest = JSON.parse(await readFile('default-site/source-manifest.json', 'utf8'))
+  // Canonical replay validates every item against source inventory/current bytes;
+  // a false quality flag is not permission to accept malformed evidence.
+  assert.deepEqual(report, await inspectMigration('default-site', manifest, report.layout))
+  const validation = await validateMigrationReport('default-site')
+  assert.deepEqual(validation, report.qualityPassed
+    ? { passed: true, detail: 'Version 1 report matches the source inventory and verified output bytes' }
+    : { passed: false, detail: 'Migration report contains failed or unsupported source features' })
+  console.log(JSON.stringify({ canonicalDefaultReport: true, qualityPassed: report.qualityPassed, validation }))
+  process.exit(0)
+}
 
 // Migration is offline; child npm install/build stages run in the parent script.
 const deny = () => { throw new Error('Migration network disabled in consumer probe') }
