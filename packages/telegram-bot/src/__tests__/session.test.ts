@@ -1,24 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { SessionStore } from '../session.js'
 
-describe('SessionStore', () => {
-  it('defaults an unknown chat to idle', () => {
-    const sessions = new SessionStore()
-    expect(sessions.get(1)).toEqual({ stage: 'idle' })
+describe('actor scoped generations', () => {
+  it('isolates chat:sender identities', () => {
+    const s = new SessionStore(); s.get('42:42').stage = 'running'
+    expect(s.get('43:43').stage).toBe('idle')
   })
-
-  it('stores and retrieves per-chat state independently', () => {
-    const sessions = new SessionStore()
-    sessions.set(1, { stage: 'awaiting_sql', wxrPath: '/tmp/a.xml' })
-    sessions.set(2, { stage: 'idle' })
-    expect(sessions.get(1)).toEqual({ stage: 'awaiting_sql', wxrPath: '/tmp/a.xml' })
-    expect(sessions.get(2)).toEqual({ stage: 'idle' })
-  })
-
-  it('reset returns a chat to idle', () => {
-    const sessions = new SessionStore()
-    sessions.set(5, { stage: 'running', jobId: 'job_x' })
-    sessions.reset(5)
-    expect(sessions.get(5)).toEqual({ stage: 'idle' })
+  it('reset invalidates old state and keyboard generation', () => {
+    const s = new SessionStore(); const old = s.get('42:42'); const next = s.reset('42:42')
+    expect(s.current('42:42', old)).toBe(false); expect(next.generation).not.toBe(old.generation)
   })
 })

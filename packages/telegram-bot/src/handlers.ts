@@ -1,135 +1,120 @@
-/**
- * Command/message handling logic for the depress Telegram bot.
- *
- * Kept decoupled from grammy's Bot/Context types where practical so it's
- * easy to unit test: handlers take a small `BotPort` interface (download a
- * file, send a message/keyboard, run a job) instead of the real grammy API.
- * src/bot.ts adapts a real grammy Bot to this port.
- */
-import { listThemes, isValidTheme, runJob, type Job, type JobStore, type JobInput } from '@depress-org/job-core'
-import { SessionStore } from './session.js'
+import { listThemes, isValidTheme, runJob, type JobStore } from '@depress-org/job-core'
+import { SessionStore, type ChatState } from './session.js'
+import { type IncomingFile, type FileRole } from './uploads.js'
 
-export interface IncomingFile {
-  /** Telegram file_id, used to resolve a download URL. */
-  fileId: string
-  /** Suggested file name (e.g. from document.file_name). */
-  fileName?: string
-}
-
-/** Minimal surface the handlers need from the chat platform; grammy's Bot satisfies a superset of this. */
 export interface BotPort {
-  downloadFile(file: IncomingFile, destDir: string): Promise<string>
-  sendMessage(chatId: number, text: string): Promise<void>
-  sendThemeKeyboard(chatId: number): Promise<void>
+  downloadFile(file: IncomingFile, role: FileRole, dir: string): Promise<string>
   makeUploadDir(): Promise<string>
+  cleanup(dir?: string): Promise<void>
+  accepts(file: IncomingFile, role: FileRole): boolean
+  sendMessage(chatId: number, text: string): Promise<void>
+  sendThemeKeyboard(chatId: number, generation: string): Promise<void>
 }
+export interface Deps { bot: BotPort; store: JobStore; sessions: SessionStore; sessionTtlMs: number }
 
-export interface Deps {
-  bot: BotPort
-  store: JobStore
-  sessions: SessionStore
-}
-
-function isWxrFile(fileName: string | undefined): boolean {
-  if (!fileName) return true // accept unnamed uploads; content isn't sniffed at this stage
-  return /\.(xml|wxr)$/i.test(fileName)
-}
-
-export async function handleStart(deps: Deps, chatId: number): Promise<void> {
-  deps.sessions.reset(chatId)
-  await deps.bot.sendMessage(
-    chatId,
-    'Welcome to depress \uD83D\uDC4B\nSend me a WordPress export (WXR) file to begin migrating your site.',
-  )
-}
-
-export async function handleDocument(deps: Deps, chatId: number, file: IncomingFile): Promise<void> {
-  const state = deps.sessions.get(chatId)
-
-  if (state.stage === 'idle') {
-    if (!isWxrFile(file.fileName)) {
-      await deps.bot.sendMessage(chatId, 'That doesn\u2019t look like a WXR export (.xml). Please send your WordPress export file.')
+/** All actions are actor-scoped and every continuation checks the same state identity. */
+export class Handlers {
+  private timers = new Map<string, ReturnType<typeof setTimeout>>()
+  constructor(private deps: Deps) {}
+  private current(key: string, state: ChatState) { return this.deps.sessions.current(key, state) }
+  private async safe(task: () => Promise<unknown>) { try { await task() } catch { /* Delivery/cleanup failure is never an unhandled background rejection. */ } }
+  private clear(key: string) { clearTimeout(this.timers.get(key)); this.timers.delete(key) }
+  private expire(key: string, state: ChatState) {
+    this.clear(key)
+    const timer = setTimeout(() => {
+      this.timers.delete(key)
+      if (!this.current(key, state) || !['awaiting_sql', 'awaiting_theme'].includes(state.stage)) return
+      this.deps.sessions.reset(key)
+      void this.safe(() => this.deps.bot.cleanup(state.uploadDir))
+    }, this.deps.sessionTtlMs)
+    timer.unref(); this.timers.set(key, timer)
+  }
+  async start(key: string, chatId: number) {
+    const old = this.deps.sessions.get(key)
+    this.deps.sessions.reset(key); this.clear(key)
+    // In-flight uploads and jobs own their cleanup until they settle.
+    if (['idle', 'awaiting_sql', 'awaiting_theme'].includes(old.stage)) await this.safe(() => this.deps.bot.cleanup(old.uploadDir))
+    await this.safe(() => this.deps.bot.sendMessage(chatId, 'Welcome! Send a WordPress export (.xml/.wxr). Local migration only; media archives are not supported yet.'))
+  }
+  async document(key: string, chatId: number, file: IncomingFile) {
+    const { bot, sessions } = this.deps
+    const state = sessions.get(key)
+    if (!['idle', 'awaiting_sql'].includes(state.stage)) return
+    const role = state.stage === 'idle' ? 'wxr' : 'sql'
+    if (!bot.accepts(file, role)) {
+      await this.safe(() => bot.sendMessage(chatId, role === 'wxr' ? 'Send a named WXR .xml/.wxr within the upload size limit. Media archives are not supported.' : 'Expected a named SQL .sql dump within the upload size limit, or /skip. Media archives are not supported.'))
       return
     }
-    const uploadDir = await deps.bot.makeUploadDir()
-    const wxrPath = await deps.bot.downloadFile(file, uploadDir)
-    deps.sessions.set(chatId, { stage: 'awaiting_sql', wxrPath })
-    await deps.bot.sendMessage(chatId, 'Got your WXR export. Send a SQL dump now, or /skip to continue without one.')
-    return
+    const previous = state.stage
+    state.stage = 'uploading'; this.clear(key) // claim before first await
+    let dir = state.uploadDir
+    try {
+      dir ??= await bot.makeUploadDir()
+      if (!this.current(key, state)) { await this.safe(() => bot.cleanup(dir)); return }
+      state.uploadDir = dir
+      const path = await bot.downloadFile(file, role, dir)
+      if (!this.current(key, state)) { await this.safe(() => bot.cleanup(dir)); return }
+      if (role === 'wxr') { state.wxrPath = path; state.stage = 'awaiting_sql' }
+      else { state.sqlDumpPath = path; state.stage = 'awaiting_theme' }
+      this.expire(key, state)
+      if (role === 'wxr') await this.safe(() => bot.sendMessage(chatId, 'Got your WXR export. Send a SQL dump or /skip. Media archives are not supported yet.'))
+      else await this.safe(() => bot.sendThemeKeyboard(chatId, state.generation))
+    } catch {
+      if (!this.current(key, state)) { await this.safe(() => bot.cleanup(dir)); return }
+      if (previous === 'idle') { sessions.reset(key); await this.safe(() => bot.cleanup(dir)) }
+      else { state.stage = 'awaiting_sql'; this.expire(key, state) }
+      await this.safe(() => bot.sendMessage(chatId, 'Upload failed validation or download. Retry a valid file, or /start.'))
+    }
   }
-
-  if (state.stage === 'awaiting_sql') {
-    const uploadDir = await deps.bot.makeUploadDir()
-    const sqlDumpPath = await deps.bot.downloadFile(file, uploadDir)
-    deps.sessions.set(chatId, { stage: 'awaiting_theme', wxrPath: state.wxrPath, sqlDumpPath })
-    await deps.bot.sendThemeKeyboard(chatId)
-    return
+  async skip(key: string, chatId: number) {
+    const state = this.deps.sessions.get(key)
+    if (state.stage !== 'awaiting_sql') return
+    state.stage = 'awaiting_theme'; this.expire(key, state)
+    await this.safe(() => this.deps.bot.sendThemeKeyboard(chatId, state.generation))
   }
-
-  await deps.bot.sendMessage(chatId, 'I\u2019m not expecting a file right now. Send /start to begin a new migration.')
+  async theme(key: string, chatId: number, generation: string, themeId: string) {
+    const { bot, sessions, store } = this.deps
+    const state = sessions.get(key)
+    if (state.stage !== 'awaiting_theme' || generation !== state.generation || !isValidTheme(themeId)) return
+    state.stage = 'starting'; this.clear(key) // suppress concurrent callbacks before async create
+    try {
+      const job = await store.create({ wxrPath: state.wxrPath!, sqlDumpPath: state.sqlDumpPath, themeId, mode: 'migrate-only' })
+      if (!this.current(key, state)) { await this.safe(() => bot.cleanup(state.uploadDir)); return }
+      state.stage = 'running'; state.jobId = job.id
+      // Own the promise, including terminal notification and cleanup. Observer callbacks
+      // are best-effort only; the typed runJob return is the terminal authority.
+      void this.execute(key, chatId, state, job.id).catch(() => {})
+    } catch {
+      const replacement = this.current(key, state) ? sessions.reset(key) : undefined
+      await this.safe(() => bot.cleanup(state.uploadDir))
+      if (replacement && this.current(key, replacement)) await this.safe(() => bot.sendMessage(chatId, 'Unable to queue migration. Send /start.'))
+    }
+  }
+  private async execute(key: string, chatId: number, state: ChatState, jobId: string) {
+    const { bot, sessions, store } = this.deps
+    const active = () => this.current(key, state) && state.jobId === jobId && state.stage === 'running'
+    // Ordered, bounded delivery; each queued operation rechecks identity at send time.
+    let delivery = Promise.resolve()
+    const enqueue = (text: string) => { delivery = delivery.then(async () => { if (active()) await this.safe(() => bot.sendMessage(chatId, text)) }); return delivery }
+    try {
+      void enqueue(`Queued job ${jobId}. Local migration only.`)
+      const result = await runJob(store, jobId, { onProgress: (job) => {
+        if (job.id !== jobId || ['done', 'failed', 'queued'].includes(job.status) || !active()) return
+        return enqueue(`${job.status}…`)
+      } })
+      if (result.status === 'done') {
+        const lines = ['Done! Migration completed.']
+        if (result.deployUrl) lines.push(`Live URL: ${result.deployUrl}`)
+        else lines.push('Not deployed; no live URL was created.')
+        if (result.repoPath) lines.push(`Local artifact: ${result.repoPath} (server filesystem, not a hosted repository link)`)
+        await enqueue(lines.join('\n'))
+      } else await enqueue('Migration failed. Send /start to retry.')
+    } catch { await enqueue('Migration failed. Send /start to retry.') }
+    finally {
+      // Cleanup is independent of network success, and stale jobs never reset new sessions.
+      await this.safe(() => bot.cleanup(state.uploadDir))
+      if (active()) sessions.reset(key)
+    }
+  }
 }
-
-export async function handleSkipSql(deps: Deps, chatId: number): Promise<void> {
-  const state = deps.sessions.get(chatId)
-  if (state.stage !== 'awaiting_sql') {
-    await deps.bot.sendMessage(chatId, 'Nothing to skip right now. Send /start to begin.')
-    return
-  }
-  deps.sessions.set(chatId, { stage: 'awaiting_theme', wxrPath: state.wxrPath })
-  await deps.bot.sendThemeKeyboard(chatId)
-}
-
-export async function handleThemeChoice(deps: Deps, chatId: number, themeId: string): Promise<void> {
-  const state = deps.sessions.get(chatId)
-  if (state.stage !== 'awaiting_theme') {
-    await deps.bot.sendMessage(chatId, 'No migration is waiting for a theme. Send /start to begin.')
-    return
-  }
-  if (!isValidTheme(themeId)) {
-    await deps.bot.sendMessage(chatId, `Unknown theme: ${themeId}`)
-    return
-  }
-
-  const input: JobInput = { wxrPath: state.wxrPath, sqlDumpPath: state.sqlDumpPath, themeId }
-  const job = await deps.store.create(input)
-  deps.sessions.set(chatId, { stage: 'running', jobId: job.id })
-
-  await deps.bot.sendMessage(chatId, `Queued \uD83D\uDFE1 job ${job.id} (theme: ${themeId}). I\u2019ll keep you posted.`)
-
-  // Fire-and-forget, same pattern as packages/web: progress comes through onProgress.
-  void runJob(deps.store, job.id, { onProgress: (j: Job) => void reportProgress(deps, chatId, j) }).catch(() => {
-    /* runJob already records failures on the job itself; reportProgress sees the final state */
-  })
-}
-
-const STATUS_EMOJI: Record<Job['status'], string> = {
-  queued: '\uD83D\uDFE1',
-  migrating: '\u2699\uFE0F',
-  building: '\uD83D\uDD28',
-  deploying: '\uD83D\uDE80',
-  done: '\u2705',
-  failed: '\u274C',
-}
-
-export async function reportProgress(deps: Deps, chatId: number, job: Job): Promise<void> {
-  const emoji = STATUS_EMOJI[job.status]
-  if (job.status === 'done') {
-    const lines = [`${emoji} Done!`]
-    if (job.deployUrl) lines.push(`Live URL: ${job.deployUrl}`)
-    if (job.repoPath) lines.push(`Repo: ${job.repoPath}`)
-    await deps.bot.sendMessage(chatId, lines.join('\n'))
-    deps.sessions.reset(chatId)
-    return
-  }
-  if (job.status === 'failed') {
-    await deps.bot.sendMessage(chatId, `${emoji} Migration failed: ${job.error ?? 'unknown error'}`)
-    deps.sessions.reset(chatId)
-    return
-  }
-  await deps.bot.sendMessage(chatId, `${emoji} ${job.status}\u2026`)
-}
-
-export function themeKeyboardLabels(): string[] {
-  const themes = listThemes()
-  return [...themes.map((t: { id: string }) => t.id), 'scaffold']
-}
+export function themeKeyboardLabels(): string[] { return [...new Set([...listThemes().map(t => t.id), 'scaffold'])] }

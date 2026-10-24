@@ -1,140 +1,31 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { InMemoryJobStore } from '@depress-org/job-core'
+import { describe, it, expect, vi } from 'vitest'
+import { InMemoryJobStore, runJob } from '@depress-org/job-core'
 import { SessionStore } from '../session.js'
-import {
-  handleStart,
-  handleDocument,
-  handleSkipSql,
-  handleThemeChoice,
-  reportProgress,
-  type Deps,
-  type BotPort,
-} from '../handlers.js'
-
-// Mock job-core's runJob so tests never touch real migration/deploy/network code.
-vi.mock('@depress-org/job-core', async () => {
-  const actual = await vi.importActual<typeof import('@depress-org/job-core')>('@depress-org/job-core')
-  return {
-    ...actual,
-    runJob: vi.fn(async (store: any, jobId: string, opts: any) => {
-      const job = await store.update(jobId, { status: 'done', deployUrl: 'https://example.pages.dev' })
-      opts?.onProgress?.(job)
-      return job
-    }),
-    isValidTheme: (id: string) => id === 'scaffold' || id === 'hugo-theme',
-    listThemes: () => [{ id: 'hugo-theme', name: 'Hugo Theme', description: 'test theme' }],
-  }
-})
-
-function makeFakeBot(): BotPort {
-  return {
-    downloadFile: vi.fn(async (_file, destDir) => `${destDir}/downloaded.xml`),
-    sendMessage: vi.fn(async () => {}),
-    sendThemeKeyboard: vi.fn(async () => {}),
-    makeUploadDir: vi.fn(async () => '/tmp/fake-upload-dir'),
-  }
+import { Handlers, themeKeyboardLabels, type BotPort } from '../handlers.js'
+vi.mock('@depress-org/job-core', async original => ({ ...await original<typeof import('@depress-org/job-core')>(), runJob: vi.fn() }))
+function setup() {
+  const bot: BotPort = { makeUploadDir: vi.fn(async () => '.tmp/mock-owned'), downloadFile: vi.fn(async () => '.tmp/mock-owned/source.xml'), accepts: () => true, cleanup: vi.fn(async () => {}), sendMessage: vi.fn(async () => {}), sendThemeKeyboard: vi.fn(async () => {}) }
+  const sessions = new SessionStore(); const store = new InMemoryJobStore(); const handlers = new Handlers({ bot, sessions, store, sessionTtlMs: 1000 })
+  return { bot, sessions, store, handlers }
 }
-
-describe('telegram-bot handlers', () => {
-  let bot: BotPort
-  let store: InMemoryJobStore
-  let sessions: SessionStore
-  let deps: Deps
-  const chatId = 42
-
-  beforeEach(() => {
-    bot = makeFakeBot()
-    store = new InMemoryJobStore()
-    sessions = new SessionStore()
-    deps = { bot, store, sessions }
+describe('handler state claims and failure recovery', () => {
+  it('offers unique shared adapter themes including scaffold', () => { const ids = themeKeyboardLabels(); expect(ids).toContain('scaffold'); expect(new Set(ids).size).toBe(ids.length) })
+  it('rejects unknown theme and invalid-stage skip', async () => {
+    const { handlers, store, sessions, bot } = setup(); await handlers.skip('k', 42); expect(bot.sendThemeKeyboard).not.toHaveBeenCalled()
+    const state = sessions.get('k'); state.stage = 'awaiting_theme'; await handlers.theme('k', 42, state.generation, 'not-a-theme'); expect(await store.list()).toEqual([])
   })
-
-  it('/start resets session and greets the user', async () => {
-    sessions.set(chatId, { stage: 'running', jobId: 'stale' })
-    await handleStart(deps, chatId)
-    expect(sessions.get(chatId)).toEqual({ stage: 'idle' })
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('WordPress export'))
+  it('cleans abandoned inputs on /start even when greeting fails', async () => {
+    const { handlers, sessions, bot } = setup(); Object.assign(sessions.get('k'), { stage: 'awaiting_sql', uploadDir: '.tmp/mock-owned' }); vi.mocked(bot.sendMessage).mockRejectedValue(new Error('offline'))
+    await handlers.start('k', 42); expect(bot.cleanup).toHaveBeenCalledWith('.tmp/mock-owned'); expect(sessions.get('k').stage).toBe('idle')
   })
-
-  it('accepts a WXR document and asks for SQL dump next', async () => {
-    await handleDocument(deps, chatId, { fileId: 'f1', fileName: 'export.xml' })
-    expect(bot.downloadFile).toHaveBeenCalled()
-    expect(sessions.get(chatId)).toMatchObject({ stage: 'awaiting_sql' })
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('/skip'))
+  it('does not launch a job whose async creation completes after /start', async () => {
+    const { handlers, store, sessions, bot } = setup(); const state = sessions.get('k'); Object.assign(state, { stage: 'awaiting_theme', uploadDir: '.tmp/mock-owned', wxrPath: '.tmp/mock-owned/source.xml' })
+    let resolve!: (x: any) => void; vi.spyOn(store, 'create').mockImplementation(() => new Promise(r => { resolve = r }))
+    vi.mocked(runJob).mockClear(); const pending = handlers.theme('k', 42, state.generation, 'scaffold'); await handlers.start('k', 42); resolve({ id: 'old' }); await pending
+    expect(runJob).not.toHaveBeenCalled(); expect(bot.cleanup).toHaveBeenCalledWith('.tmp/mock-owned'); expect(sessions.get('k').stage).toBe('idle')
   })
-
-  it('rejects a document with a non-xml extension while idle', async () => {
-    await handleDocument(deps, chatId, { fileId: 'f1', fileName: 'export.zip' })
-    expect(bot.downloadFile).not.toHaveBeenCalled()
-    expect(sessions.get(chatId)).toEqual({ stage: 'idle' })
-  })
-
-  it('accepting a SQL dump after WXR moves to theme selection', async () => {
-    sessions.set(chatId, { stage: 'awaiting_sql', wxrPath: '/tmp/export.xml' })
-    await handleDocument(deps, chatId, { fileId: 'f2', fileName: 'dump.sql' })
-    expect(sessions.get(chatId)).toMatchObject({ stage: 'awaiting_theme', wxrPath: '/tmp/export.xml' })
-    expect(bot.sendThemeKeyboard).toHaveBeenCalledWith(chatId)
-  })
-
-  it('/skip moves straight to theme selection without a sql dump', async () => {
-    sessions.set(chatId, { stage: 'awaiting_sql', wxrPath: '/tmp/export.xml' })
-    await handleSkipSql(deps, chatId)
-    expect(sessions.get(chatId)).toEqual({ stage: 'awaiting_theme', wxrPath: '/tmp/export.xml' })
-    expect(bot.sendThemeKeyboard).toHaveBeenCalledWith(chatId)
-  })
-
-  it('/skip with nothing pending tells the user to /start', async () => {
-    await handleSkipSql(deps, chatId)
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('/start'))
-  })
-
-  it('choosing a valid theme queues a job and reports progress to done', async () => {
-    sessions.set(chatId, { stage: 'awaiting_theme', wxrPath: '/tmp/export.xml' })
-    await handleThemeChoice(deps, chatId, 'hugo-theme')
-
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('Queued'))
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('https://example.pages.dev'))
-    expect(sessions.get(chatId)).toEqual({ stage: 'idle' })
-  })
-
-  it('choosing an invalid theme does not create a job', async () => {
-    sessions.set(chatId, { stage: 'awaiting_theme', wxrPath: '/tmp/export.xml' })
-    await handleThemeChoice(deps, chatId, 'nonexistent-theme')
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('Unknown theme'))
-    expect(await store.list()).toHaveLength(0)
-  })
-
-  it('theme choice without a pending migration is rejected', async () => {
-    await handleThemeChoice(deps, chatId, 'hugo-theme')
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('/start'))
-  })
-
-  it('reportProgress formats a failed job and resets the session', async () => {
-    sessions.set(chatId, { stage: 'running', jobId: 'job_1' })
-    await reportProgress(deps, chatId, {
-      id: 'job_1',
-      status: 'failed',
-      error: 'boom',
-      input: { wxrPath: '/tmp/x.xml', themeId: 'scaffold' },
-      createdAt: 0,
-      updatedAt: 0,
-    })
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('boom'))
-    expect(sessions.get(chatId)).toEqual({ stage: 'idle' })
-  })
-
-  it('reportProgress formats an in-progress status without resetting the session', async () => {
-    sessions.set(chatId, { stage: 'running', jobId: 'job_2' })
-    await reportProgress(deps, chatId, {
-      id: 'job_2',
-      status: 'migrating',
-      input: { wxrPath: '/tmp/x.xml', themeId: 'scaffold' },
-      createdAt: 0,
-      updatedAt: 0,
-    })
-    expect(bot.sendMessage).toHaveBeenCalledWith(chatId, expect.stringContaining('migrating'))
-    expect(sessions.get(chatId)).toEqual({ stage: 'running', jobId: 'job_2' })
+  it('cleans inputs and restores idle if store creation rejects', async () => {
+    const { handlers, store, sessions, bot } = setup(); const state = sessions.get('k'); Object.assign(state, { stage: 'awaiting_theme', uploadDir: '.tmp/mock-owned', wxrPath: 'x' }); vi.spyOn(store, 'create').mockRejectedValue(new Error('store down'))
+    await handlers.theme('k', 42, state.generation, 'scaffold'); expect(sessions.get('k').stage).toBe('idle'); expect(bot.cleanup).toHaveBeenCalledWith('.tmp/mock-owned'); expect(bot.sendMessage).toHaveBeenCalledWith(42, 'Unable to queue migration. Send /start.')
   })
 })

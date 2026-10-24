@@ -11,12 +11,14 @@
     "start": "node dist/bot.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"
   },
   "license": "MIT",
   "dependencies": {
     "@depress-org/job-core": "*",
     "@depress-org/wp-migrate": "*",
+    "fast-xml-parser": "^4.5.7",
     "grammy": "^1.30.0"
   },
   "devDependencies": {
@@ -30,5 +32,7 @@
     "url": "https://github.com/depress-org/depress.git",
     "directory": "packages/telegram-bot"
   },
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
