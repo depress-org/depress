@@ -1,322 +1,60 @@
-# depress — Quality Roadmap
-
-> Goal: every migrated site should be production-ready on day one — SEO preserved, all content transferred, editorial team unblocked.
-
----
-
-## What "high quality" means, measurably
-
-| Metric | Target |
-|---|---|
-| Content completeness | 100% of published posts and pages transferred, zero silent drops |
-| SEO continuity | Every old URL has a 301 redirect entry; Yoast title/description preserved |
-| Media integrity | All images present; alt text preserved from WordPress |
-| Editor readiness | Keystatic admin shows all posts, every post opens without errors |
-| Build success | `npm run build` passes on first attempt after migration |
-
----
-
-## Status (reconciled 2026-10-23, see kanban task t_7d7c9c50 report)
-
-| Priority | Status |
-|---|---|
-| 1 — author + featured image extraction | ✅ DONE |
-| 2 — redirect map generation | ✅ DONE |
-| 3 — image alt text from postmeta | ⚠️ PARTIAL — extracted in parser.ts but not threaded into Markdoc image output yet |
-| 4 — SEO metadata from WXR | ✅ DONE (engine + frontmatter; per-theme-adapter field mapping not re-verified) |
-| 5 — post-migration quality report | ❌ NOT DONE — `migration-report.md` is never written to disk |
-| 6 — DB import module (`--db` flag) | ✅ DONE |
-| 7 — page builder shortcode handling | ✅ DONE |
-| 8 — embedded video fallback | ✅ DONE |
-
-Remaining real work: finish Priority 3 (thread alt text into generated content)
-and Priority 5 (actually generate `migration-report.md`), plus `depress check`
-and `depress deploy`, which are still literal stubs.
-
----
-
-## Priority 1 — Author + featured image extraction (parser.ts) ✅ DONE
-
-**Current state:** `dc:creator` (author) and `_thumbnail_id` (featured image) are never read. Author defaults to the site name; featured images are blank.
-
-**Fix: extend `parseWPExport`**
-
-```typescript
-// In the item loop, after extracting categories/tags:
-const author = item['dc:creator'] ?? ''
-
-// Read postmeta array for _thumbnail_id
-const postmeta: any[] = Array.isArray(item['wp:postmeta'])
-  ? item['wp:postmeta']
-  : item['wp:postmeta'] ? [item['wp:postmeta']] : []
-
-let featuredImageId: string | undefined
-let seoTitle = ''
-let seoDescription = ''
-
-for (const meta of postmeta) {
-  const key = meta['wp:meta_key']
-  const val = meta['wp:meta_value']
-  if (key === '_thumbnail_id') featuredImageId = String(val)
-  if (key === '_yoast_wpseo_title') seoTitle = val ?? ''
-  if (key === '_yoast_wpseo_metadesc') seoDescription = val ?? ''
-}
-
-posts.push({
-  ...,
-  author,
-  featuredImageId,
-  seoTitle,
-  seoDescription,
-})
-```
-
-Also build an `attachmentsById` map so `featuredImageId` can be resolved to a URL at transform time.
-
-**Impact:** author name in every post frontmatter; featured images propagate to theme adapters that support them.
-
----
-
-## Priority 2 — Redirect map generation (migrate.ts) ✅ DONE
-
-**Current state:** The migrate command has no redirect map output. Old WordPress URLs break silently.
-
-**Fix:** After parsing, generate `redirects.json` in the output directory:
-
-```typescript
-// Build redirects from old slug → new Astro path
-const redirects: Record<string, string> = {}
-for (const post of wpExport.posts) {
-  if (post.status !== 'publish') continue
-  // WordPress canonical: /<year>/<month>/<slug>/ or /?p=<id>
-  const date = new Date(post.date)
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  
-  const newPath = post.type === 'page' ? `/${post.slug}/` : `/blog/${post.slug}/`
-  redirects[`/${y}/${m}/${post.slug}/`] = newPath
-  redirects[`/?p=${post.id}`] = newPath
-}
-await writeFile(join(outputDir, 'redirects.json'), JSON.stringify(redirects, null, 2))
-```
-
-Also write a `_redirects` file (Netlify/Cloudflare format) and inject the redirect map into `astro.config.ts` under `redirects:`.
-
-**Impact:** zero SEO cliff on cutover. This is the #1 enterprise objection answered automatically.
-
----
-
-## Priority 3 — Image alt text from postmeta (media.ts / parser.ts) ⚠️ PARTIAL
-
-**Current state (2026-10-23):** The extraction described below IS implemented
-(`parser.ts` lines ~52-61, confirmed) — `media[].altText` is populated from
-`_wp_attachment_image_alt` with a fallback to `item.title`. What remains: that
-`altText` value has no consumer anywhere downstream — it is not threaded into
-the `![alt](url)` Markdoc image output in `transform.ts` /
-`keystatic-transform.ts`. Remaining work is wiring the already-extracted value
-into generated content, not re-doing the extraction.
-
-**Original problem statement (historical):** Alt text comes from `item.title` (the filename). The actual alt text lives in `wp:postmeta` under key `_wp_attachment_image_alt`.
-
-**Fix:** In the attachment parsing loop:
-
-```typescript
-if (postType === 'attachment') {
-  const postmeta = ...  // same loop as above
-  const altText = postmeta.find(m => m['wp:meta_key'] === '_wp_attachment_image_alt')?.['wp:meta_value'] ?? item.title ?? ''
-  media.push({ ..., altText })
-}
-```
-
-Then `injectContent` / `transformWp2mdOutput` can apply the correct alt text when writing `![alt](url)` in Markdown.
-
-**Impact:** accessibility compliance; alt text is a ranking signal Google audits.
-
----
-
-## Priority 4 — SEO metadata from WXR (parser.ts + theme adapters) ✅ DONE (engine)
-
-**Current state:** Yoast SEO meta (`_yoast_wpseo_title`, `_yoast_wpseo_metadesc`) is ignored even though it's present in the WXR postmeta.
-
-**Fix:** Parse it in Priority 1 above. Then thread it through:
-
-1. Add `seoTitle?: string` and `seoDescription?: string` to `WPPost` in `@depress/core`
-2. `mapFrontmatter` in each theme adapter should prefer `fm.seoTitle` / `fm.seoDescription` over computed values
-3. AstroWind: map to `metadata.title` and `metadata.description` (already has these fields in the page component, just not populated)
-4. Rocket: map to `description` frontmatter field
-
-**Impact:** pages rank under their existing Yoast-optimized titles — no SEO regression.
-
----
-
-## Priority 5 — Post-migration quality report ❌ NOT DONE
-
-**Current state (2026-10-23):** `MigrationReport` data model exists
-(`@depress-org/core`, built by `transformPosts` in `transform.ts`), but it is
-only used for an in-memory CLI summary — `migration-report.md` is never
-written to the output directory. Confirmed by repo-wide grep: zero
-implementation hits for "migration-report", only this spec text. Missing-alt
-and unrecognised-shortcode tracking described below do not exist yet either.
-
-**Fix:** Generate `migration-report.md` in the output directory:
-
-```markdown
-# Migration Report — My Blog
-Generated: 2026-05-04
-
-## Summary
-- 124 pages, 14 posts transferred
-- 138/138 redirects generated
-- 12 images missing alt text (see below)
-- 3 posts had unrecognised shortcodes (content preserved as HTML comment)
-
-## Missing alt text
-- /wp-content/uploads/2022/photo.jpg — used in: "Post title A"
-- ...
-
-## Unrecognised shortcodes
-- Post "Custom page builder example" — [et_pb_section] shortcode preserved as comment
-- ...
-
-## Next steps
-- Run `npm run build` to verify the site compiles
-- Visit /keystatic to review your content in the CMS
-- Deploy: `npm run build && npx wrangler pages deploy dist`
-```
-
-**Impact:** turns a black box into a transparent handoff document. Required for enterprise and agency tiers.
-
----
-
-## Priority 6 — DB import module (`--db` flag) ✅ DONE
-
-The WXR file is limited: no ACF field data, no user profiles beyond `dc:creator`, no full Yoast meta for all post types, no WooCommerce data. The SQL dump has everything.
-
-**New file: `packages/wp-migrate/src/db-reader.ts`**
-
-Parse a MySQL dump (plain text, no live DB connection needed):
-
-```typescript
-export interface WPDBData {
-  postMeta: Map<number, Record<string, string>>  // post_id → {key: value}
-  users: Map<number, { name: string; email: string; bio: string }>
-  options: Record<string, string>  // blogname, blogdescription, etc.
-}
-
-export async function readWPDatabase(sqlPath: string): Promise<WPDBData> {
-  // Parse INSERT INTO `wp_postmeta` ... VALUES lines
-  // Parse INSERT INTO `wp_users` ... VALUES lines  
-  // Parse INSERT INTO `wp_options` ... VALUES lines
-}
-```
-
-**CLI flag:**
-```
-depress migrate --input export.xml --db wp-database.sql --output ./output
-```
-
-When `--db` is supplied, db data augments the WXR parse:
-- Yoast meta for every post type (including pages, custom post types)
-- ACF field values as extra frontmatter
-- Full author profiles (bio, avatar URL)
-- Site options (`blogname`, `blogdescription`, `siteurl`) as fallbacks
-
-**Impact:** unlocks ACF-heavy sites (the hardest category), populates author bios, makes the Enterprise tier pitch credible.
-
----
-
-## Priority 7 — Page builder shortcode handling (transform.ts) ✅ DONE
-
-**Current state:** `[et_pb_section]`, `[vc_row]`, `[fusion_builder_container]` and all other shortcodes are silently deleted. Content from Elementor/Divi/WPBakery vanishes.
-
-**Approach:** Replace silent deletion with a tiered strategy:
-
-```typescript
-function handleShortcodes(html: string): { content: string; warnings: string[] } {
-  const warnings: string[] = []
-  
-  // Known recoverable: caption, gallery, embed
-  let out = html
-    .replace(/\[caption[^\]]*\](.*?)\[\/caption\]/gs, '$1')
-    .replace(/\[gallery[^\]]*\]/g, '<!-- gallery: review manually -->')
-    .replace(/\[embed\](.*?)\[\/embed\]/gs, '$1')  // keep the URL
-  
-  // Page builders: extract inner text content, warn
-  const builderRe = /\[(et_pb_text|vc_column_text|fusion_text)[^\]]*\]([\s\S]*?)\[\/\1\]/g
-  out = out.replace(builderRe, (_m, _tag, inner) => inner)
-  
-  // Structural page builder tags: strip the wrapper, keep children
-  out = out.replace(/\[(et_pb_[a-z_]+|vc_[a-z_]+|fusion_[a-z_]+)[^\]]*\]([\s\S]*?)\[\/\1\]/g, '$2')
-  out = out.replace(/\[(et_pb_[a-z_]+|vc_[a-z_]+|fusion_[a-z_]+)[^\]]*\/?\]/g, '')
-  
-  // Remaining unknown shortcodes: preserve as HTML comment for manual review
-  out = out.replace(/\[([a-z][a-z0-9_-]*)[^\]]*\]([\s\S]*?)\[\/\1\]/g, (_m, tag, inner) => {
-    warnings.push(`Unrecognised shortcode: [${tag}]`)
-    return `<!-- shortcode: [${tag}] -->\n${inner}`
-  })
-  out = out.replace(/\[([a-z][a-z0-9_-]*)[^\]]*\/?\]/g, (_m, tag) => {
-    warnings.push(`Unrecognised self-closing shortcode: [${tag}]`)
-    return `<!-- shortcode: [${tag}] -->`
-  })
-  
-  return { content: out, warnings }
-}
-```
-
-**Impact:** Elementor/Divi content is no longer silently lost. Recoverable text is preserved; structural wrappers are stripped; anything truly unknown becomes a visible HTML comment reviewable in Keystatic.
-
----
-
-## Priority 8 — Embedded video fallback (transform.ts) ✅ DONE
-
-**Current state:** YouTube/Vimeo iframes are converted to nothing by Turndown.
-
-**Fix:** Add a Turndown rule before conversion:
-
-```typescript
-turndown.addRule('iframe-video', {
-  filter: 'iframe',
-  replacement: (_content, node) => {
-    const src = (node as Element).getAttribute('src') ?? ''
-    if (src.includes('youtube.com') || src.includes('youtu.be')) {
-      const id = src.match(/(?:embed\/|v=|youtu\.be\/)([A-Za-z0-9_-]+)/)?.[1]
-      return id ? `\nhttps://www.youtube.com/watch?v=${id}\n` : ''
-    }
-    if (src.includes('vimeo.com')) {
-      return `\n${src}\n`
-    }
-    return `<!-- iframe: ${src} -->`
-  },
-})
-```
-
-Astro MDX will auto-embed YouTube links if an embed component is configured. At minimum the URL survives the migration.
-
----
-
-## 12-week delivery schedule
-
-| Week | Work |
-|---|---|
-| 1 | Priority 1: author + featured image extraction |
-| 1 | Priority 3: image alt text |
-| 2 | Priority 2: redirect map generation |
-| 2–3 | Priority 4: Yoast SEO meta threading |
-| 3 | Priority 8: embedded video fallback |
-| 4 | Priority 7: page builder shortcode handling |
-| 4 | Priority 5: quality report |
-| 5–7 | Priority 6: DB import module (`--db` flag) |
-| 8+ | Enterprise: custom post types, ACF, WooCommerce products |
-
----
-
-## The bar to clear
-
-A migration passes quality review when:
-
-1. `npm run build` succeeds with zero errors
-2. `redirects.json` has an entry for every published post
-3. Every post has a non-empty `author` field
-4. Zero posts have blank `description`/`excerpt` if Yoast meta was present in the source
-5. Migration report shows 0 silent drops (shortcodes preserved as comments, not deleted)
-6. Keystatic admin shows all posts; every post opens without a validation error
+# depress — Evidence-gated Quality Roadmap
+
+> Goal, not current guarantee: preserve published content, SEO and media, provide a usable editorial workflow, and deliver a verified site without silently dropping data.
+
+## Verified checkpoint — PR-06 / #20 (2026-10-24)
+
+Canonical planning: [milestone 1](https://github.com/depress-org/depress/milestone/1), [issue #20](https://github.com/depress-org/depress/issues/20). See [PR-05 measured acceptance](docs/PR-05-cold-acceptance.md) and [PR-06 integration/queue evidence](docs/PR-06-production-queue.md). Historical implementation plans are not acceptance evidence.
+
+**Overall NO-GO for an OSS release or public/credentialed paid web/Telegram product.** Green repository CI is necessary but does not establish installed-package, sandbox, billing or deployment readiness. OSS engine/CLI features stay free forever; paid service packages reuse the same engine.
+
+### Original quality priorities reconciled against merged source
+
+| Priority | Current bounded state | Remaining proof / owner |
+|---|---|---|
+| 1 — author + featured images | Implemented in parser/native conversion and metadata bridge | Per-theme consumer/CMS behavior and unsupported combinations remain acceptance gates (#26/#36) |
+| 2 — redirects | Redirect generation implemented | Actual hosting cutover/status/complete legacy URL coverage is not proven (#38); generated entries alone are not SEO continuity |
+| 3 — image alt | Per-occurrence inline alt plus attachment fallback implemented and report-validated | Nine real renderer controls and archive bytes/ordered alts measured; arbitrary media/formats/provenance not guaranteed |
+| 4 — SEO metadata | Raw-source inventory and metadata bridge implemented | Per-theme mapping/CMS/consumer gates; arbitrary custom fields are not silently treated as preserved |
+| 5 — migration report | Versioned source-manifest.json and migration-report.json/.md emitted; per-item fail-closed validation and job quality gate | Canonical static grammar only; reports are not signed source provenance or arbitrary-template proof |
+| 6 — SQL import | Optional dump reader and CLI/service input exist | Not complete database/PHP/plugin migration; hosted isolation and original-feature acceptance still required |
+| 7 — shortcode handling | Conservative unsupported-feature findings preserve review needs | General builder/plugin compatibility NOT implemented; bounded static-gallery implementation is #30 |
+| 8 — video fallback | URL fallback behavior exists | Not a promise of functional dynamic embeds or every provider; inspect actual rendered output |
+
+`check` and `deploy` are **not literal stubs**. CLI service implementations exist, with typed failures, bounded shell-free subprocess execution and trusted opt-in deployment. Actual installed default migration nevertheless fails in the current packed artifact (#36). No live deployment was performed or inferred from mocked URLs.
+
+### Integrated foundations (bounded acceptance, not product GO)
+
+| Scope | PR | Verified merge |
+|---|---|---|
+| Required coverage + generated-site CI | #8 | fbdfd3d03ef7e0e35f92eeae0193d7226da7cba8 |
+| Security inventory / targeted nanoid patch | #27 | e72e58ab9086780316c8ebe0d53db03e022d8b57 |
+| Typed shared migration/process/deploy services | #28 | d0865b0b657848aafe2e4c2276ad9ec400999d91 |
+| Authenticated immutable owner-scoped admission | #32 | 692704a0595032037e960769888ff381ad9d27a3 |
+| Static-plugin design/matrix (docs only) | #31 | b4f5008c6a6cde2885abc131762a8ac954038e67 |
+| Safe Telegram upload/session adapter | #14 | fb9f4a654a5c562ca4c643f111ff3500838ad5e0 |
+| Truthful per-item reports / privacy / visible-body checks | #34 | 95bab42089c0093e8b6faf2c4aac8f1166da3014 |
+| Native bounded WXR/source/filesystem/media boundaries | #33 | c70ad9a23b57f4d012e2e3a10ef5c88800b3e7f0 |
+| Shared safe ZIP admission, web + Telegram | #35 | 52821c41fa6664e95fc0533a5d19f27ce597c212 |
+| Cold acceptance script + explicit NO-GO evidence | #39 | 86a495040e3a670c17276a96fdc253e31dc545f1 |
+
+### Next bounded sprint
+
+1. **#36 packaging** — supported asset/license allowlist, compatible public package ranges, real clean tarball-installed default/scaffold CLI + library acceptance. Existing author and independent QA cards; no publication.
+2. **#26 compatible patched toolchain** — root/default/scaffold cold consumers, runtime/CMS/media/privacy matrix, independent audits; Workers artifacts must fail closed at the old Pages adapter. Staged work is not merged readiness.
+3. **#30 static-plugin v1** — reviewed in-tree data-only contract, default empty plugin list, bounded local gallery and canonical compatibility report; independent rendered-output acceptance. No PHP/marketplace/general WP compatibility.
+4. **#25 private durable workers** — actual isolation, bounded durable queue, cancellation/crash recovery, owned retention/redaction/preview. Currently incomplete and human-gated on disposable OCI/Postgres test authorization; local profile tests are not runtime enforcement.
+5. **#37 entitlement requirements** — service-only versioned quota/reservation/idempotency policy and deterministic fake-event scenarios, reconcile revenue claims. No real payments or OSS gating.
+6. **#38 offline deployment/rollback/ops** — immutable owner+artifact binding, trusted capability, offline adapter fixtures and recovery runbook. A future explicitly authorized sandbox deployment remains a separate gate.
+
+Do not duplicate existing implementation lanes. Independent QA reviews exact published heads before guarded integration. Package lock, native migration/report/scaffold, and deploy service are coordination hotspots.
+
+## Release bar
+
+- Real clean installed default and scaffold consumers migrate, validate and build; supported assets/licenses and compatible dependency ranges are present.
+- Raw published inventory reconciles with actual rendered bodies, routes, metadata, media bytes/alts; drafts/private data never enter public artifacts. Unsupported features fail visibly.
+- Actual CMS readers/editor flows and URL/redirect behavior meet the documented support matrix; static output does not prove live backend functionality.
+- Exact-head required CI succeeds without lowering any coverage/quality gate; independent review and retained evidence precede integration.
+- Consumer/root dependency findings and reachable runtime risks are resolved or explicitly enforced by an independently reviewed policy, not waived by green unit tests.
+- Public hosting additionally needs measured worker isolation, durable ownership/lifecycle, entitlement semantics and artifact-bound deploy/rollback/operations acceptance.
+- Real credentials, production resources, spending, deployment, npm publication/releases and destructive actions require explicit owner authorization. No such authorization is implied here.
