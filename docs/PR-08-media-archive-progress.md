@@ -1,109 +1,136 @@
-# PR-08 / #22: shared media ZIP ingestion — implementation checkpoint
+# PR-08 / #22: shared WordPress media archive ingestion
 
-**Not feature acceptance, not production approval.** Both adapters now call the
-same bounded extractor and pass its validated WordPress root as `JobInput.mediaDir`.
-Native-converter + real generated-site verification is still gated on independently
-reviewed Integration D (`t_df50d5f5` / PR33 #24). Do not exercise the archive E2E
-against the obsolete loopback/upstream converter or call an author-only head approved.
+Both authenticated web and private allowlisted bot call the **same** ZIP
+validator/extractor and pass its validated WordPress root as `JobInput.mediaDir`
+to the existing owner-scoped pipeline/native converter. Source export + files is
+original product scope, not a paid-only feature. Independent final QA is requested
+through existing `t_4c838050`; this document is not production or merge approval.
 
-## Reviewed prerequisites and scope
+## Reviewed prerequisites
 
-C actually merged bot PR14 reviewed `525b04c` as `fb9f4a6`, report PR34 reviewed
-`08fda090` as `95bab420`, retaining docs31. This branch starts at main
-`95bab42089c0093e8b6faf2c4aac8f1166da3014` and cherry-picks only independent
-extractor checkpoint `f00b5ff` as `b96cdba`; no obsolete parent stacks replayed.
-Parent PR reviews/checks freshly read in this task. No changes to migration,
-serialization, canonical report or privacy-proof hotspots; D owns reconciliation.
-No self-merge, deployment, production secret access, npm publication or protection changes.
+Bot14 reviewed `525b04c` merged `fb9f4a6`; report34 reviewed `08fda090` merged
+`95bab420`; docs31 retained. The independent extractor checkpoint `f00b5ff` was
+cherry-picked as `b96cdba` on that reviewed C baseline; obsolete parent stacks were
+not replayed. Resumed PR35 consumes D's independently accepted PR33 `0fb093c`
+merged as `c70ad9a23b57f4d012e2e3a10ef5c88800b3e7f0` via normal integration merge.
+Parent reviews, merged state and all three D main checks freshly read from GitHub.
+No native conversion, serialization, manifest/report/privacy implementation changed
+by #22. No parent self-merge, deployment, real credentials, publication or protection
+changes. Preserve source/owner semantics when integrating other branches.
 
-## Upload contract
+## User-facing contract
 
-- **Web:** authenticated `POST /api/jobs` multipart file fields `wxr` (required),
-  `sql` (optional), **`media`** (optional ZIP); required text field `theme`.
-  Omit `media` to skip. Empty/malformed media is an error, never a skip/success.
-  Up to three files + four existing metadata fields, seven parts, no duplicates.
-  Existing streamed byte/deadline, admission and owner-scoped authorization remain.
-  Shared admission validates WXR/SQL bytes independently of supplied filenames/MIME;
-  an archive cannot silently become SQL or XML. HTTP default file/request bounds
-  (8/10 MiB) apply before the extractor's higher standalone compressed limit.
-- **Bot:** private allowlisted sender only: WXR -> SQL or `/skip` -> explicit
-  **media ZIP or `/skip`** -> generation-bound theme keyboard -> migrate-only job.
-  A ZIP sent at the SQL stage is rejected before download, not interpreted as SQL.
-  Sender-derived `telegram:<id>` selects the exact owner capability passed through
-  async job execution. Upload/download/extraction claims stages before awaiting;
-  stale work cleans only its old owned directory, never resets a new session.
-- Both flows retain the entire owned upload directory until the actual job settles;
-  cleanup covers extracted files as well as source WXR/SQL. Rejected admission,
-  abandoned sessions, expiry and `/start` have scoped cleanup paths. Existing #25
-  owns crash-durable retries, hostile concurrent ancestor swaps and worker isolation.
+- **Web:** authenticated `POST /api/jobs`, required multipart file `wxr`, optional
+  files `sql` and **`media`** (ZIP), required text `theme`. Omit `media` to skip;
+  empty/malformed media is an error. Three files plus four existing metadata
+  fields, seven parts, no duplicates. Existing streamed request/file/deadline and
+  owner admission limits remain (default 8 MiB/file, 10 MiB/request).
+- **Bot:** private allowlisted actor: WXR -> SQL or `/skip` -> explicit media ZIP
+  or `/skip` -> generation-bound theme keyboard -> migrate-only job. ZIP in SQL
+  stage is rejected before download. Shared content-role validation rejects binary
+  archives disguised as XML/SQL irrespective of filenames/MIME.
+- The server-derived `telegram:<senderId>` capability remains identical through
+  create/runJob; no anonymous fallback. Each async stage claims its state before
+  awaiting and checks generation/job identity afterward. Stale work owns only its
+  prior directory and cannot reset or clean another session.
+- The full owned upload directory (including extracted files) is retained until
+  migration settles. Rejection, expiry, abandon, `/start` and terminal paths clean
+  their own scope. #25 still owns crash-durable cleanup/hostile concurrent FS and
+  OS process isolation; this library is not a sandbox.
 
-## Accepted archive layout and limits
+## ZIP layout and limits
 
-ZIP only, exact `wp-content/uploads/<relative media path>`, optional directory
-entries. No outer project folder, bare `uploads/`, or root files. ASCII letters,
-digits, spaces, underscores, hyphens, parentheses and dots in components; no
-trailing dot/space or Windows reserved device name. Supported suffixes:
+Exact `wp-content/uploads/<relative-media-path>` with optional directory entries.
+No outer project folder, bare `uploads/`, root files, traversal, absolute or Windows
+paths. Components use ASCII letters/digits/spaces/underscores/hyphens/parentheses/
+dots; trailing dot/space and Windows reserved devices are rejected. Allowed suffixes:
 `jpg jpeg png gif webp avif mp4 webm ogv mp3 ogg wav pdf`.
-SVG/executables/SQL/XML and other types are rejected. Suffix admission is NOT
-malware/MIME/signature/decode/source-provenance verification. Native #24 may safely
-support fewer media types; unsupported report findings must still fail quality.
-Remote theme archives remain disabled; no second tar/theme extractor introduced.
+SVG/executables/SQL/XML/other suffixes are rejected. Suffix admission is NOT malware,
+MIME, decode or provenance proof. Native #24 supports referenced raster media only;
+a safe ZIP containing a referenced unsupported PDF fails job/report quality rather
+than being called a successful migration. Remote theme archives remain disabled;
+no competing tar/theme extractor was added.
 
-Shared defaults: 20 MiB compressed, 100 MiB expanded, 20 MiB per file, 2000 entries
-(including directories), ten path components, 30 seconds. Standalone trusted
-operator options accept positive integer overrides. Bot additionally uses its
-configured download byte/time bounds; HTTP uses its existing streamed bounds.
+Shared defaults: 20 MiB compressed, 100 MiB expanded, 20 MiB/file, 2000 entries
+(including directories), ten components, 30 seconds. Trusted operator overrides
+must be positive safe integers. Bot and HTTP limits apply first.
 
-All central paths, counts, declared sizes, regular-file modes, duplicate paths,
-case-conflicting implicit parents, file/directory collisions and supported types
-are checked **before writes**. Static symlink upload roots/ancestors are rejected.
-Observed inflated bytes, exact sizes, CRC32 and monotonic deadline are checked
-again during extraction. Timer destroys the active reader; cleanup is awaited,
-not an abandoned Promise.race writer. Private fresh directories, exclusive 0600
-files and 0700 parents. Extractor uses no subprocess, network or environment API.
-Unreturning kernel IO and process crashes are not solved by an in-process timer.
+All central paths, modes, counts, declared sizes, duplicate/case-conflicting
+implicit parents and file/directory collisions are checked before extraction writes.
+Static symlink upload roots/ancestors are rejected. Actual inflated bytes, CRC32,
+exact declared sizes and monotonic deadline are rechecked. Timeout destroys the
+active reader and awaits cleanup, not a Promise.race leaving writes alive. Fresh
+private 0700 owned directories, exclusive 0600 files. No subprocess/network/env API
+in the extractor. Unreturning kernel IO and process crash are not solved by timers.
 
-Dependencies: pinned yauzl3.4.0 and buffer-crc32 1.0.0; @types/yauzl2.10.3;
-existing fast-xml-parser4 graph reused by shared role validator. Every pre-existing
-lock node is byte-for-JSON identical except job-core workspace metadata. npm's
-unrelated optional/libc/zod lock churn was detected and discarded. Existing audit
-advisories (17 including one critical) remain; this is not a clean-audit claim.
+Dependencies: pinned yauzl3.4.0, buffer-crc32 1.0.0, @types/yauzl2.10.3, pend;
+existing fast-xml-parser reused. Programmatic lock comparison preserves every
+pre-existing node except `packages/job-core` metadata and adds only those four nodes.
+Five coverage configurations/thresholds unchanged. Root install still reports 17
+advisories including one critical; five security tests do not imply clean audit.
 
-## Executed evidence in this checkpoint
+## Reproducible verification
 
-- TDD extractor RED from first attempt retained; resumed web RED: unsupported media
-  field and archive-as-WXR/SQL admission failures (three failures); bot RED: missing
-  explicit media stage (three failures); static symlink-root RED reproduced write
-  outside intended lexical scope before the fix.
-- Cold Node20.20.2/npm10.8.2 `npm ci --legacy-peer-deps`, full build/typecheck/lint,
-  full tests and all **five unchanged** coverage gates pass, with pinned Rocket
-  submodule. Tests: CLI71, job-core78, bot51, web70, engine114. Five audit regression
-  tests pass. Negative statements99 gate actually rejects and restores config.
-- Hostile ZIP suite covers traversal/absolute/Windows/null/encoded paths, unsupported
-  layout/type/compression, symlink/device/FIFO modes, duplicate/case/implicit-parent
-  conflicts, truncated/non-ZIP, bad deflate/CRC, compressed/expanded/file/count/depth
-  bounds, elapsed deadline, actual timer destroying a stalled reader, encryption,
-  forged expansion, stored/multichunk success and idempotent cleanup. Both adapters
-  have offline IO tests; added stale media `/start` and explicit-media expiry checks.
-- Advisory independent diff review found no actionable security/logic defects;
-  suggested media-specific timer/stale cases were added and run. This is not the
-  downstream independent feature acceptance or merge authorization.
-- Logs retained in `.tmp/evidence/`. Synthetic fixture PNG generated with stdlib
-  zlib and verified IHDR/IDAT/IEND CRCs; archive preserves that exact byte stream.
+Use CI Node20 (`.nvmrc`), npm10.8.2 and recursive pinned submodules:
 
-## Remaining acceptance (do not claim done)
+```sh
+npm ci --legacy-peer-deps
+npm run build
+npm run typecheck
+npm run lint
+npm test
+node --test scripts/security-audit.test.mjs
+npm run test:gate
+npm run test:integration
+npm run test:media-archive
+node scripts/cold-consumer.mjs
+```
 
-1. Consume actual D independently reviewed/merged native-converter reconciliation;
-   preserve raw manifest/schema1, exact per-occurrence alt and canonical privacy.
-2. Execute `scripts/media-archive-site.mjs`: actual BUILT authenticated web and
-   grammy adapters + real runJob/migrate, original source origin offline, WXR+SQL+
-   ZIP; generated Astro builds, exact referenced media bytes, per-occurrence inline
-   alt + unambiguous attachment fallback, machine/human reports and absent-media
-   failure. The harness denies host-process network/listeners and allowlists build
-   environment, but **has not yet been exercised**; it may require corrections.
-3. Wire that exercised harness into existing required generated-site CI lane after
-   its prerequisite exists; rerun cold root/consumer installation/build/unchanged
-   lock rebuild and current report negative/restored build matrix.
-4. Final issue22/PR-08 PR, exact-head required app15368 CI plus security, independent
-   review through existing downstream `t_4c838050`; no self merge. Public/credentialed
-   operation remains NO-GO #19/#25/#26.
+Fresh Node20/npm10 cold build/typecheck/lint, **474 tests** (CLI103, job-core78,
+bot51, web70, engine172 including pinned Rocket), five unchanged gates, security5
+and actual negative statements99 rejection/restoration passed. Historical TDD RED
+logs retained: missing extractor, web unsupported media/archive-as-WXR/SQL3,
+bot missing stage3, symlink-root1 before fixes. Hostile tests include traversal,
+absolute/Windows/null/encoded paths, symlink/device/FIFO modes, duplicates/case/
+implicit-parent/file-directory conflicts, truncation/non-ZIP/bad deflate/CRC,
+compressed/expanded/file/count/depth/time bounds, forged expansion/encryption,
+real stalled-reader cancellation/no late writes, valid stored/multichunk CRC,
+stale media `/start`, expiry and scoped cleanup. No external services needed.
+
+`scripts/media-archive-site.mjs` exercises actual BUILT Hono + grammy adapters,
+real scoped runJob and native conversion, synthetic WXR+SQL+uploads ZIP with original
+origin `https://original-source.invalid`. It disables host-process HTTP/HTTPS/fetch/
+connect/listen during migration; Telegram transport is synthetic, NOT mocked
+runJob. No origin server or fallback HTTP service is started. Web generated output
+gets real fresh registry install/build and same-lock npm-ci/rebuild; bot generated
+output uses installed root-locked dependencies. It checks exact built media bytes,
+three ordered rendered inline/attachment-fallback alt occurrences, source URL
+replacement, schema1 JSON/human report/validator, reports outside public `dist`,
+owned cleanup and truthful no-live-URL response. Missing archive and admitted ZIP
+with unsupported referenced PDF must fail real item/report/job quality.
+
+A synthetic secret canary is set **before migration**; artifacts are checked for
+its absence and each child receives only an explicit allowlisted environment.
+Build children are NOT OS-network-sandboxed: registry network for installation is
+expected; the original-origin offline claim applies to adapter/migration IO, not
+all descendant networking. This is not #25 worker-isolation acceptance.
+
+The existing required `Generated fixture site` CI lane now builds both adapters
+in dependency order and runs the exercised archive harness, retaining original
+body/image/privacy/native controls and independent cold consumer lane. Original
+`Build & type-check` and security lanes remain. Remote exact-head status and final
+raw evidence are recorded in the PR and task handoff, never inferred from old
+checkpoint lanes that did not execute archives.
+
+Independent advisory diff review found no blocking security/logic error; its
+canary timing, unsupported-source negative and networking-claim suggestions were
+addressed. This is not the final downstream feature review. PR35 stays unmerged
+until independent QA accepts the exact CI-green head. Public/credentialed hosting,
+full default AstroWind/toolchain, plugin compatibility and broad product acceptance
+remain NO-GO under #25/#26/#19 and their existing owners.
+
+Local raw logs are retained in `.tmp/evidence`. An npm11 installation experiment
+failed the root build with missing zod; canonical npm10 cold reinstall/build passed.
+An extended harness tool invocation timed out during final cleanup after printed
+assertion passes; that invocation is not counted as an exit-zero acceptance run.
+Final acceptance uses completed runner exit codes and exact-head remote checks.

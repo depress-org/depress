@@ -1,8 +1,10 @@
 // PR-08 / #22: real BUILT web + grammy -> scoped runJob -> native migration.
-// No live Telegram, origin server, credentials or deployment. Registry installation
-// is independently exercised by cold-consumer.mjs; these builds use the root lock.
+// No live Telegram, origin server, credentials or deployment. Web artifact gets
+// a fresh registry consumer install + unchanged-lock rebuild; bot uses root lock.
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, lstat } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { buildSite, defaultSpawn } from '../packages/cli/dist/services/deploy.js'
 import { resolve, join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import http from 'node:http'
@@ -44,12 +46,34 @@ async function verifyAndBuild(job, label) {
   const content = await readFile(join(site, 'src/content/articles/archive-post/index.mdoc'), 'utf8')
   for (const alt of ['Inline context one', 'Inline context two', 'Attachment fallback']) assert(content.includes(alt), `missing per-occurrence alt ${alt}`)
   assert(!content.includes('https://original-source.invalid/wp-content/uploads/'), 'original media URL survived')
-  await symlink(join(root, 'node_modules'), join(site, 'node_modules'), 'dir')
-  const home = join(work, label + '-home'); await mkdir(home)
-  // Allowlist: do not inherit the worker/provider/Telegram environment into Astro.
-  const env = { PATH: process.env.PATH, HOME: home, TMPDIR: work, NODE_ENV: 'production', ASTRO_TELEMETRY_DISABLED: '1', NO_COLOR: '1' }
-  process.env.PR08_SYNTHETIC_SECRET = 'archive-env-must-not-leak'
-  execFileSync('npm', ['run', 'build', '--workspaces=false'], { cwd: site, env, stdio: 'inherit', timeout: 120_000 })
+  if (label === 'web') {
+    // A real fresh generated consumer: registry install (not linked node_modules),
+    // build, same-lock npm ci and rebuild of the archive-backed web artifact.
+    const tracedSpawn = async (cmd, args, options) => {
+      assert.equal(options.env.PR08_SYNTHETIC_SECRET, undefined)
+      const result = await defaultSpawn(cmd, args, options)
+      console.log(`PR-08 archive cold consumer: ${args.join(' ')}`)
+      console.log(result.stdout); console.error(result.stderr)
+      assert.equal(result.code, 0)
+      return result
+    }
+    await buildSite(site, tracedSpawn)
+    assert(!(await lstat(join(site, 'node_modules'))).isSymbolicLink())
+    const lock = await readFile(join(site, 'package-lock.json'))
+    await buildSite(site, tracedSpawn)
+    assert.deepEqual(await readFile(join(site, 'package-lock.json')), lock)
+    console.log(`PR-08 archive cold consumer unchanged-lock rebuild PASS ${createHash('sha256').update(lock).digest('hex')}`)
+  } else {
+    await symlink(join(root, 'node_modules'), join(site, 'node_modules'), 'dir')
+    const home = join(work, label + '-home'); await mkdir(home)
+    // Allowlist: do not inherit worker/provider/Telegram environment into Astro.
+    const env = { PATH: process.env.PATH, HOME: home, TMPDIR: work, NODE_ENV: 'production', ASTRO_TELEMETRY_DISABLED: '1', NO_COLOR: '1' }
+    assert.equal(env.PR08_SYNTHETIC_SECRET, undefined)
+    execFileSync(process.execPath, ['-e', "if(process.env.PR08_SYNTHETIC_SECRET)process.exit(1)"], { cwd: site, env })
+    execFileSync('npm', ['run', 'build', '--workspaces=false'], { cwd: site, env, stdio: 'inherit', timeout: 120_000 })
+  }
+  // Adapter/migration IO is disabled in this process. Child install/build is NOT
+  // an OS network sandbox; registry access for fresh dependency installation is expected.
   const html = await readFile(join(site, 'dist/blog/archive-post/index.html'), 'utf8')
   assert(html.includes('Archive body marker.'))
   const images = [...html.matchAll(/<img\b[^>]*>/g)].map(m => m[0])
@@ -60,9 +84,9 @@ async function verifyAndBuild(job, label) {
     await assert.rejects(readFile(join(site, 'dist', name)))
     assert(!(await readFile(join(site, name), 'utf8')).includes(process.env.PR08_SYNTHETIC_SECRET))
   }
-  delete process.env.PR08_SYNTHETIC_SECRET
   console.log(`PR-08 ${label}: real owner-scoped migration, machine/human report, three rendered alt occurrences, exact built media bytes, private reports PASS`)
 }
+process.env.PR08_SYNTHETIC_SECRET = 'archive-env-must-not-leak'
 try {
   const store = new InMemoryJobStore(), uploads = join(work, 'web')
   const app = createApp({ store, uploadRoot: uploads, identities: [{ ownerId: 'archive-web', token: 'a'.repeat(32) }] })
@@ -84,6 +108,26 @@ try {
   assert(missingReport.media.find(i => i.id === 202).findings.some(f => f.code === 'missing-media'))
   assert.equal((await validateMigrationReport(missingJob.outputDir)).passed, false)
   console.log('PR-08 skipped archive: missing source media explicitly fails item/report/job; no unsupported success PASS')
+  // ZIP admission allows PDF files, but native raster conversion does not.
+  // Validate truthful failure at the real adapter/pipeline/report boundary.
+  const unsupportedStore = new InMemoryJobStore(), unsupportedUploads = join(work, 'unsupported')
+  const unsupportedApp = createApp({ store: unsupportedStore, uploadRoot: unsupportedUploads, identities: [{ ownerId: 'unsupported', token: 'c'.repeat(32) }] })
+  const unsupportedForm = new FormData()
+  unsupportedForm.set('wxr', new File([wxr.toString().replaceAll('photo.png', 'photo.pdf').replaceAll('image/png', 'application/pdf')], 'export.xml'))
+  unsupportedForm.set('media', new File([await fixture('unsupported.zip')], 'uploads.zip'))
+  unsupportedForm.set('theme', 'scaffold')
+  assert.equal((await unsupportedApp.request('/api/jobs', { method: 'POST', body: unsupportedForm, headers: { Authorization: `Bearer ${'c'.repeat(32)}` } })).status, 202)
+  const unsupportedJob = await terminal(unsupportedStore, 'unsupported'); outputs.push(unsupportedJob.outputDir)
+  assert.equal(unsupportedJob.status, 'failed')
+  await wait(async () => (await readdir(unsupportedUploads)).length === 0)
+  const unsupportedReport = JSON.parse(await readFile(join(unsupportedJob.outputDir, 'migration-report.json'), 'utf8'))
+  assert.equal(unsupportedReport.qualityPassed, false)
+  const unsupportedItem = unsupportedReport.media.find(i => i.id === 202)
+  assert.notEqual(unsupportedItem.status, 'migrated')
+  assert(unsupportedItem.findings.length > 0)
+  assert.equal((await validateMigrationReport(unsupportedJob.outputDir)).passed, false)
+  assert((await readFile(join(unsupportedJob.outputDir, 'migration-report.md'), 'utf8')).includes('202'))
+  console.log('PR-08 admitted ZIP with unsupported referenced PDF: item/report/job non-green, owned cleanup PASS')
   // Actual grammy adapter with offline transport, NOT a mocked runJob.
   const sessions = new SessionStore(), botStore = new InMemoryJobStore(), botUploads = join(work, 'bot')
   const bot = createBot('123456:synthetic-offline-token', { sessions, store: botStore, allowedUserIds: [42], workspaceRoot: botUploads })
