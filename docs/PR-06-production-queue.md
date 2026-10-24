@@ -37,6 +37,7 @@ All new cards pin `gpt-6.1-sol` / `openai-codex`; every worker uses its own clon
 | #36 | Existing `t_423a327c` / fullstack-dev RUNNING, packaging work not shipped | `t_32b38c97` / qa after implementation + PR-06, installed real tgz acceptance; separate packaging from #26 default build boundary |
 | #37 | New `t_60897111` / biz-analyst after PR-06, versioned service-only entitlement requirements + JSON event scenarios, revenue reconciliation | Same-card independent qa review required; subsequent runtime implementation must be separately bounded after accepted contract, no live Stripe |
 | #38 | New `t_36ffda23` / devops after PR-06, offline owner/artifact-bound static Pages contract/tests/runbook | Same-card independent qa review required; rejects Workers artifact shape, no live deployment |
+| #20 / PR40 | This roadmap/evidence PR, OPEN at author handoff | `t_63d73277` / qa after PR-06, independent source/issue/CI review and guarded docs integration; no author selfmerge |
 
 Worker statuses are a point-in-time snapshot, not a guarantee of continuous execution. No merged feature claim for current authored work. #25 remains a real human blocker even when independent work progresses.
 
@@ -52,7 +53,7 @@ Read existing profile-scoped cron list before considering new automation: existi
 
 Read remote workflow list and source: CI, Security evidence and existing Release are active. Release triggers v* tags or manual publish confirmation and references npm-publish environment. **No tag, dispatch, environment/secrets edit, npm publication or release was performed; environment protection was not verified, so the source comment is not proof of an enforced approval gate.** Do not create competing automation.
 
-Reconcile scoped issues only where original acceptance is met (#15 CI and #22 bounded ZIP) with explicit evidence comments. #23/#24 broader hostile runtime boundaries and #17/#19/#20 cross-cutting gates stay open unless their full criteria are independently satisfied. Add remaining security/plugin issues to milestone1 rather than hiding them outside the readiness tracker.
+Canonical readback reconciled #15 to CLOSED after original CI acceptance and preserved independent evidence. #22 remains OPEN: bounded ZIP acceptance is merged, but its host-secret/isolation criterion still depends on unfinished #25. #23/#24 broader hostile runtime boundaries and #17/#19/#20 cross-cutting gates remain open. Added #23/#24/#25/#26/#30 to milestone1 and read back each assignment; remaining security/plugin risks are not hidden outside the readiness tracker.
 
 ## No-go blockers
 
