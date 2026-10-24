@@ -1,106 +1,135 @@
-/**
- * Orchestration pipeline: queued -> migrating -> building -> deploying -> done/failed.
- *
- * This module is the ONLY place that calls into @depress-org/wp-migrate and the
- * depress CLI's check/deploy logic. packages/web and packages/telegram-bot both
- * import `runJob` from here — neither re-implements migration or deploy logic,
- * and neither shells out to the `depress` binary.
- */
-import { mkdtemp, rm } from 'fs/promises'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { listThemes, getThemeAdapter } from '@depress-org/wp-migrate'
 import { runMigrate } from '@depress-org/depress/commands/migrate'
-import { runDeploy, type DeployTarget } from '@depress-org/depress/commands/deploy'
+import {
+  runDeploy,
+  validateDeployOptions,
+  ServiceError,
+  type DeployOptions,
+} from '@depress-org/depress/commands/deploy'
 import type { Job, JobInput, JobStore } from './types.js'
-
 export { listThemes, getThemeAdapter }
 export { InMemoryJobStore } from './types.js'
-export type { Job, JobInput, JobStatus, JobStore, DeployTargetId } from './types.js'
+export type {
+  Job,
+  JobInput,
+  JobStatus,
+  JobStore,
+  DeployTargetId,
+} from './types.js'
 
+/** Detached, presentation-only view; nested input is readonly too. */
+export type JobSnapshot = Readonly<Omit<Job, 'input'>> & {
+  readonly input: Readonly<JobInput>
+}
 export interface RunJobOptions {
-  /** Called whenever the job's status changes, for progress reporting (web SSE, bot chat edits, etc). */
-  onProgress?: (job: Job) => void
+  /** Best-effort observation, never awaited by the pipeline. */
+  onProgress?: (job: JobSnapshot) => void | Promise<void>
+  /** Trusted server-side opt-in, never copied from an upload/request body. */
+  deployment?: Omit<DeployOptions, 'dir' | 'onStage'>
 }
-
-/**
- * Validate a theme id against the shared registry before a job is queued.
- * Both web and bot front-ends call this so the "pick a theme" UI stays
- * backed by the same source of truth as the CLI.
- */
 export function isValidTheme(themeId: string): boolean {
-  if (themeId === 'scaffold') return true
-  return getThemeAdapter(themeId) !== undefined
+  return themeId === 'scaffold' || getThemeAdapter(themeId) !== undefined
 }
 
-async function setStatus(store: JobStore, id: string, status: Job['status'], extra?: Partial<Job>, onProgress?: (job: Job) => void) {
-  const job = await store.update(id, { status, ...extra })
-  onProgress?.(job)
-  return job
+const running = new WeakMap<JobStore, Map<string, Promise<Job>>>()
+/** Duplicate runs share one promise; terminal jobs never re-enter the pipeline. */
+export function runJob(
+  store: JobStore,
+  jobId: string,
+  opts: RunJobOptions = {},
+): Promise<Job> {
+  let jobs = running.get(store)
+  if (!jobs) {
+    jobs = new Map()
+    running.set(store, jobs)
+  }
+  const existing = jobs.get(jobId)
+  if (existing) return existing
+  const promise = execute(store, jobId, opts).finally(() => jobs!.delete(jobId))
+  jobs.set(jobId, promise)
+  return promise
 }
-
-/**
- * Run the full upload -> migrate -> deploy pipeline for a queued job.
- * Mutates job status in the given store as it progresses; never throws —
- * failures are recorded on the job as status 'failed' + error message.
- */
-export async function runJob(store: JobStore, jobId: string, opts: RunJobOptions = {}): Promise<Job> {
+async function execute(
+  store: JobStore,
+  jobId: string,
+  opts: RunJobOptions,
+): Promise<Job> {
   const job = await store.get(jobId)
   if (!job) throw new Error(`Job not found: ${jobId}`)
-  const { input } = job
-  const { onProgress } = opts
-
-  let outputDir: string | undefined
+  if (job.status !== 'queued') return job
+  const input = { ...job.input }
+  async function update(status: Job['status'], extra: Partial<Job> = {}) {
+    const updated = await store.update(jobId, { ...extra, status })
+    // Do not expose the store's object (including input), or wait for UI/network IO.
+    // Promise.resolve also consumes asynchronous rejection after runJob returns.
+    try {
+      if (opts.onProgress)
+        void Promise.resolve(opts.onProgress(structuredClone(updated))).catch(() => {})
+    } catch {
+      /* observer only */
+    }
+    return updated
+  }
   try {
-    outputDir = await mkdtemp(join(tmpdir(), 'depress-job-'))
-    await setStatus(store, jobId, 'migrating', { outputDir }, onProgress)
-
+    if (!isValidTheme(input.themeId))
+      throw new ServiceError('INVALID_THEME', 'Unknown theme')
+    if (input.mode && !['migrate-only', 'deploy'].includes(input.mode))
+      throw new ServiceError('INVALID_MODE', 'Unknown job mode')
+    let deployment: DeployOptions | undefined
+    if (input.mode === 'deploy') {
+      if (!opts.deployment)
+        throw new ServiceError(
+          'DEPLOY_DISABLED',
+          'Deployment is disabled; use migrate-only mode',
+        )
+      deployment = { ...opts.deployment }
+      if (input.deployTarget && input.deployTarget !== deployment.target)
+        throw new ServiceError(
+          'INVALID_TARGET',
+          'Target does not match server deployment configuration',
+        )
+      validateDeployOptions(deployment)
+    }
+    const root = resolve('.tmp')
+    await mkdir(root, { recursive: true })
+    const outputDir = await mkdtemp(join(root, 'depress-job-'))
+    await update('migrating', { outputDir })
     await runMigrate({
       input: input.wxrPath,
       db: input.sqlDumpPath,
       wpDir: input.mediaDir,
-      output: outputDir ?? '',
+      output: outputDir,
       theme: input.themeId,
     })
-
-    await setStatus(store, jobId, 'building', undefined, onProgress)
-    // runMigrate already builds taxonomy/content; `npm run build` + deploy happen
-    // together inside runDeploy (buildSite -> deployToX), matching the CLI's flow.
-
-    await setStatus(store, jobId, 'deploying', undefined, onProgress)
-    const target: DeployTarget = input.deployTarget ?? 'cloudflare-pages'
-    await runDeploy({
-      dir: outputDir,
-      target,
-      projectName: input.projectName,
-    })
-
-    // runDeploy logs its own output rather than returning a structured result;
-    // this scaffold captures the repo path (git-init'd by runMigrate) and
-    // leaves deployUrl for a follow-up iteration that threads runDeploy's
-    // return value through (tracked separately — deploy.ts currently only
-    // console.logs the URL, see ROADMAP follow-up).
-    return await setStatus(
-      store,
-      jobId,
-      'done',
-      { repoPath: outputDir },
-      onProgress,
-    )
+    let deployUrl: string | undefined
+    if (deployment) {
+      const result = await runDeploy({
+        ...deployment,
+        dir: outputDir,
+        onStage: async (stage) => {
+          await update(stage)
+        },
+      })
+      // Adapter must return a URL; resolving undefined is not success.
+      if (!result?.deployUrl)
+        throw new ServiceError(
+          'MISSING_DEPLOY_URL',
+          'Deployment did not return a valid URL',
+        )
+      deployUrl = result.deployUrl
+    }
+    return await update('done', { repoPath: outputDir, deployUrl })
   } catch (err) {
-    return await setStatus(
-      store,
-      jobId,
-      'failed',
-      { error: err instanceof Error ? err.message : String(err) },
-      onProgress,
-    )
+    // Never persist raw child/provider errors or credentials in shared job state.
+    const error =
+      err instanceof ServiceError
+        ? `${err.code}: ${err.message}`
+        : 'PIPELINE_FAILED: Migration or deployment failed'
+    return await update('failed', { error, deployUrl: undefined })
   }
 }
-
-/** Clean up a job's working directory (call after the result has been consumed/deployed). */
 export async function cleanupJob(job: Job): Promise<void> {
-  if (job.outputDir) {
-    await rm(job.outputDir, { recursive: true, force: true }).catch(() => {})
-  }
+  if (job.outputDir) await rm(job.outputDir, { recursive: true, force: true })
 }

@@ -76,7 +76,7 @@ import markdoc from '@astrojs/markdoc'
 import keystatic from '@keystatic/astro'
 
 // Astro 4 + Cloudflare's manual chunk split otherwise creates an ESM TDZ
-// between Astro core and the React renderer while retrieving the manifest.
+// between Astro, React and Keystatic in a standalone nested consumer install.
 function fixCircularAstroChunks() {
   return {
     name: 'fix-circular-astro-chunks',
@@ -86,7 +86,7 @@ function fixCircularAstroChunks() {
       return {
         ...options,
         manualChunks(id, api) {
-          if (['astro', '@astrojs/react', 'react', 'react-dom'].some(
+          if (['astro', '@astrojs/react', 'react', 'react-dom', '@keystatic/core', '@keystatic/astro'].some(
             (name) => id.includes('node_modules/' + name + '/'),
           )) return 'astro-react-vendor'
           if (typeof prev === 'function') return prev(id, api)
