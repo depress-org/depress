@@ -4,6 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 import matter from 'gray-matter'
 import TurndownService from 'turndown'
+import { proveScaffoldDraftExclusion } from './report-privacy.js'
 import type { WPExport, SourceManifest, SourceItem, ReportLayout, MigrationReportV1, MigrationItem, MigrationMedia, ReportFinding } from '@depress-org/core'
 
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
@@ -83,9 +84,29 @@ function expectedPath(item: SourceItem, layout: ReportLayout): string {
   return `${dir}/${item.slug}${(item.type === 'page' ? layout.pagesUseDirectoryEntries : layout.useDirectoryEntries) ? '/index' : ''}.${layout.fileExt}`
 }
 // Compare complete normalized prose, not only nonempty/count heuristics. Media and shortcodes have separate checks.
-const markdownText = (value: string) => value.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+const markdownText = (value: string) => value.replace(/<img\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 const sourceText = (value: string) => markdownText(new TurndownService().turndown(value))
 const finding = (findings: ReportFinding[], code: string, detail: string) => findings.push({ code, detail })
+
+// Conservative image syntax reader. Unknown syntax cannot prove preservation.
+// Drop fenced/inline code so a literal example is never accepted as an image.
+function images(value: string, htmlOnly = false): Array<{ src: string; alt: string }> {
+  const unescape = (s: string) => s.replace(/\\([\\\[\]])/g, '$1').replace(/&(?:amp|quot|apos|lt|gt);|&#(?:x[\da-f]+|\d+);/gi, entity => {
+    const named: Record<string, string> = { '&amp;': '&', '&quot;': '"', '&apos;': "'", '&lt;': '<', '&gt;': '>' }
+    if (named[entity.toLowerCase()]) return named[entity.toLowerCase()]
+    const hex = entity[2].toLowerCase() === 'x'
+    const point = Number.parseInt(entity.slice(hex ? 3 : 2, -1), hex ? 16 : 10)
+    return point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : entity
+  })
+  const input = htmlOnly ? value : value.replace(/```[^]*?```|~~~[^]*?~~~|`[^`\r\n]*`/g, '')
+  const found: Array<{ index: number; src: string; alt: string }> = []
+  for (const m of input.matchAll(/<img\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi)) {
+    const attrs = Object.fromEntries([...m[0].matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)].map(a => [a[1].toLowerCase(), unescape(a[2] ?? a[3] ?? a[4])]))
+    if (attrs.src) found.push({ index: m.index!, src: attrs.src, alt: attrs.alt ?? '' })
+  }
+  if (!htmlOnly) for (const m of input.matchAll(/!\[((?:\\.|[^\]\\])*)\]\(([^\s)]+)(?:\s+[^)]*)?\)/g)) found.push({ index: m.index!, src: m[2], alt: unescape(m[1]) })
+  return found.sort((a, b) => a.index - b.index)
+}
 
 /** Inspect actual bytes, not transform counters. No source content is executed. */
 export async function inspectMigration(outputDir: string, manifest: SourceManifest, layout: ReportLayout): Promise<MigrationReportV1> {
@@ -106,7 +127,35 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
     for (const key of Object.keys(source.customFields ?? {})) finding(item.findings, 'unsupported-custom-field', `Source custom field not proven migrated: ${key}`)
     if (ids.get(String(source.id))! > 1) finding(item.findings, 'duplicate-source-id', `Source ID ${source.id} is not unique`)
     if (source.type === 'attachment') continue // Media is inspected independently, including inherit-status attachments.
-    if (source.status !== 'publish') continue
+    if (source.status !== 'publish') {
+      if (!['post', 'page'].includes(source.type)) continue
+      try {
+        const path = expectedPath(source, layout)
+        const publicPaths = [path, `public/${source.type === 'page' ? '' : 'blog/'}${source.slug}/index.html`]
+        for (const candidate of publicPaths) {
+          try {
+            const bytes = await readSafe(outputDir, candidate)
+            artifacts[candidate] = sha(bytes)
+            finding(item.findings, 'nonpublic-output', `Nonpublished source ${source.id} has public output ${candidate}`)
+          } catch (error: any) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error }
+        }
+        const dir = source.type === 'page' ? layout.pagesDir! : layout.contentDir
+        const editorPath = `${dir}/_drafts/${path.slice(dir.length + 1)}`
+        let editor: Buffer | undefined
+        try { editor = await readSafe(outputDir, editorPath) }
+        catch (error: any) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error }
+        if (editor) {
+          item.outputPath = editorPath; item.contentSha256 = sha(editor)
+          try {
+            if (source.type !== 'post' || layout.contentDir !== 'src/content/articles' || layout.fileExt !== 'mdoc' || !layout.useDirectoryEntries) throw new Error('Unknown draft storage')
+            const proof = await proveScaffoldDraftExclusion(p => readSafe(outputDir, p), p => p ? safePath(outputDir, p) : realpath(outputDir))
+            for (const [file, bytes] of Object.entries(proof)) artifacts[file] = sha(bytes)
+          } catch { finding(item.findings, 'unproven-draft-exclusion', 'Editor storage is not byte-proven excluded by canonical public routes and listings') }
+        }
+      } catch { finding(item.findings, 'unsafe-path', 'Cannot safely prove nonpublished output exclusion') }
+      if (item.findings.length) item.status = 'failed'
+      continue
+    }
     if (!['post', 'page'].includes(source.type)) { item.status = 'unsupported'; finding(item.findings, 'unsupported-type', `Published ${source.type} is unsupported`); continue }
     item.status = 'failed'
     let path: string
@@ -114,12 +163,14 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
     if (slugs.get(`${source.type}:${source.slug.toLocaleLowerCase('en-US')}`)! > 1 || paths.get(path.toLocaleLowerCase('en-US'))! > 1) finding(item.findings, 'duplicate-slug', 'Multiple source items claim the same output path')
     if (item.findings.some(f => f.code === 'duplicate-source-id' || f.code === 'duplicate-slug')) continue
     let raw: string
+    let body = ''
     try {
       const bytes = await readSafe(outputDir, path)
-      raw = bytes.toString('utf8'); item.outputPath = path; item.contentSha256 = sha(bytes); output.set(source.key, raw)
+      raw = bytes.toString('utf8'); item.outputPath = path; item.contentSha256 = sha(bytes)
     } catch (error) { finding(item.findings, error instanceof UnsafePath ? 'unsafe-path' : 'missing-output', `Cannot safely read expected output ${path}`); continue }
     try {
       const fm = matter(raw, { engines: { javascript: () => { throw new Error('Executable frontmatter is forbidden') } } })
+      body = fm.content; output.set(source.key, body)
       if (fm.data.title !== source.title) finding(item.findings, 'title-mismatch', 'Output title differs from source title')
       if (fm.data.author !== source.author) finding(item.findings, 'author-mismatch', `Author for source ID ${source.id} was not preserved exactly`)
       if (source.content.trim() && !fm.content.trim()) finding(item.findings, 'empty-body', 'Nonempty source has empty output body')
@@ -138,10 +189,16 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
       if (matches.length !== 1) finding(item.findings, 'missing-featured-attachment', `Featured attachment ${source.featuredImageId} missing or ambiguous`)
       else if (!raw.includes(`/media/${basename(matches[0].url)}`)) finding(item.findings, 'featured-image-mismatch', `Featured attachment ${source.featuredImageId} is not referenced locally`)
     }
-    for (const image of source.content.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)) {
-      const local = `/media/${basename(image[1])}`
-      if (!manifest.media.some(m => m.url === image[1]) || !raw.includes(local)) finding(item.findings, 'source-image-unverified', `Source image reference not verified: ${image[1]}`)
-      try { await readSafe(outputDir, `public${local}`) } catch { finding(item.findings, 'missing-image-file', `Missing safe local media for source image: ${image[1]}`) }
+    const actualImages = images(body)
+    const occurrences = new Map<string, number>()
+    for (const image of images(source.content, true)) {
+      const local = `/media/${basename(image.src)}`
+      const index = occurrences.get(local) ?? 0
+      occurrences.set(local, index + 1)
+      const actual = actualImages.filter(i => i.src === local)[index]
+      if (!manifest.media.some(m => m.url === image.src) || !actual) finding(item.findings, 'source-image-unverified', `Source image reference not verified: ${image.src}`)
+      if (image.alt && actual?.alt !== image.alt) finding(item.findings, 'inline-alt-mismatch', `Source image occurrence ${index + 1} alt differs on ${local}`)
+      try { await readSafe(outputDir, `public${local}`) } catch { finding(item.findings, 'missing-image-file', `Missing safe local media for source image: ${image.src}`) }
     }
     item.status = item.findings.length ? 'failed' : 'migrated'
   }
@@ -152,24 +209,17 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
     const name = basename(source.url)
     if (!name || !safeRelative(name) || name.includes('/')) { finding(entry.findings, 'unsafe-path', 'Unsafe attachment filename'); continue }
     if (names.get(name.toLocaleLowerCase('en-US'))! > 1 || ids.get(String(source.id))! > 1) { entry.status = 'unsupported'; finding(entry.findings, 'ambiguous-media', `Attachment ${source.id} has duplicate ID or local basename`); continue }
-    try { const bytes = await readSafe(outputDir, `public/media/${name}`); entry.outputPath = `public/media/${name}`; entry.contentSha256 = sha(bytes) }
+    try { const bytes = await readSafe(outputDir, `public/media/${name}`); entry.outputPath = `public/media/${name}`; entry.contentSha256 = sha(bytes); if (!bytes.length) finding(entry.findings, 'empty-media', `Attachment ${source.id} has zero bytes`) }
     catch (error) { finding(entry.findings, error instanceof UnsafePath ? 'unsafe-path' : 'missing-media', `Attachment ${source.id} local file is unavailable`) }
     if (source.altText) {
       const local = `/media/${name}`
-      const preserved = [...output.values()].some(raw => {
-        const markdown = [...raw.matchAll(/!\[([^\]]*)\]\(([^\s)]+)(?:\s+[^)]*)?\)/g)].some(m => m[1] === source.altText && m[2] === local)
-        const html = [...raw.matchAll(/<img\b[^>]*>/gi)].some(m => {
-          const attrs = Object.fromEntries([...m[0].matchAll(/([\w-]+)\s*=\s*["']([^"']*)["']/g)].map(a => [a[1], a[2]]))
-          return attrs.src === local && attrs.alt === source.altText
-        })
-        return markdown || html
-      })
+      const preserved = [...output.values()].some(body => images(body).some(image => image.src === local && image.alt === source.altText))
       if (!preserved) finding(entry.findings, 'unsupported-alt', `Source alt for attachment ${source.id} is not proven preserved on a local image`)
     }
     entry.status = entry.findings.length ? (entry.findings.every(f => f.code === 'unsupported-alt') ? 'unsupported' : 'failed') : 'migrated'
   }
   return { schemaVersion: 1, sourceSha256: manifest.sourceSha256, layout: { ...layout }, items, media, artifacts,
-    qualityPassed: manifest.items.length > 0 && items.every(i => i.sourceStatus !== 'publish' || (i.type === 'attachment' ? i.findings.length === 0 : i.status === 'migrated')) && media.every(m => m.status === 'migrated') }
+    qualityPassed: manifest.items.length > 0 && items.every(i => i.findings.length === 0 && (i.sourceStatus !== 'publish' || i.type === 'attachment' || i.status === 'migrated')) && media.every(m => m.status === 'migrated') }
 }
 
 export async function writeMigrationReports(outputDir: string, manifest: SourceManifest, layout: ReportLayout): Promise<MigrationReportV1> {

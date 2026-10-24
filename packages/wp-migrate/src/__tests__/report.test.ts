@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import type { WPExport, ReportLayout } from '@depress-org/core'
+import { scaffoldAstroProject } from '../scaffold.js'
 import { createSourceManifest, inspectMigration, validateMigrationReport, writeMigrationReports } from '../report.js'
 
 const parsed: WPExport = { siteTitle: '', siteUrl: '', posts: [], media: [], categories: [], tags: [] }
@@ -104,6 +105,98 @@ describe('source inventory and migration reports', () => {
     const r = await inspectMigration(d, m, layout)
     expect(codes(r)).toEqual(expect.arrayContaining(['source-image-unverified', 'missing-image-file']))
     expect(r.media.every(m => m.status === 'unsupported')).toBe(true)
+  })
+  it.each(['private', 'draft'])('rejects %s content emitted at a public collection path, including draft:true', async status => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1) + item(2, 'post', 'secret', status))
+    for (const draft of [false, true]) {
+      await put(d, 'src/content/articles/secret/index.mdoc', `---\ntitle: Hello\nauthor: alice\ndraft: ${draft}\n---\nBody`)
+      const r = await writeMigrationReports(d, m, layout)
+      expect(r.qualityPassed).toBe(false)
+      expect(codes(r)).toContain('nonpublic-output')
+      expect((await validateMigrationReport(d)).passed).toBe(false)
+    }
+  })
+  it('rejects unproven editor draft storage, unsafe paths and post-report private leaks', async () => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1) + item(2, 'post', 'secret', 'draft'))
+    expect((await writeMigrationReports(d, m, layout)).qualityPassed).toBe(true)
+    await put(d, 'src/content/articles/secret/index.mdoc', 'Private leak')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+    await rm(join(d, 'src/content/articles/secret'), { recursive: true })
+    await put(d, 'src/content/articles/_drafts/secret/index.mdoc', 'Editable draft')
+    expect(codes(await inspectMigration(d, m, layout))).toContain('unproven-draft-exclusion')
+    expect((await inspectMigration(d, manifest(item(1) + item(2, 'post', '../secret', 'private')), layout)).qualityPassed).toBe(false)
+  })
+  it('allows only byte-proven scaffold editor drafts and detects changed/new public readers', async () => {
+    const d = await temp()
+    await scaffoldAstroProject({ siteTitle: 'Fixture', siteDescription: 'Description', siteUrl: 'https://fixture.invalid', authorName: 'alice', navItems: [], hasCategories: true, hasTags: true }, d)
+    await good(d)
+    const m = manifest(item(1) + item(2, 'post', 'secret', 'draft'))
+    await put(d, 'src/content/articles/_drafts/secret/index.mdoc', '---\ntitle: Hello\nauthor: alice\n---\nBody')
+    const r = await writeMigrationReports(d, m, layout)
+    expect(r.qualityPassed).toBe(true); expect(r.items[1].status).toBe('skipped')
+    expect(r.items[1].contentSha256).toMatch(/^[a-f0-9]{64}$/)
+    expect((await validateMigrationReport(d)).passed).toBe(true)
+    for (const extra of ['src/pages/leak.md', 'src/data/leak.ts', 'astro.config.ts']) {
+      await put(d, extra, 'Unknown reader')
+      expect((await inspectMigration(d, m, layout)).qualityPassed).toBe(false)
+      await rm(join(d, extra))
+    }
+    const route = 'src/pages/blog/[slug].astro'
+    const original = await readFile(join(d, route), 'utf8')
+    await put(d, route, original.replace(".filter((a) => !a.id.startsWith('_drafts/'))", ''))
+    expect(codes(await inspectMigration(d, m, layout))).toContain('unproven-draft-exclusion')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it.each(['post', 'page'])('rejects private %s flat-file output', async type => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(2, type, 'secret', 'private'))
+    await put(d, `src/content/${type === 'page' ? 'pages' : 'articles'}/secret.mdoc`, 'Private body')
+    expect(codes(await inspectMigration(d, m, { ...layout, useDirectoryEntries: false }))).toContain('nonpublic-output')
+  })
+  it.each(['', 'Wrong alt', 'Attachment fallback'])('rejects lost source inline alt (%s) even if its words occur elsewhere', async alt => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1, 'post', 'hello', 'publish', '', '<p>Important inline alt</p><img alt="Important inline alt" src="https://old.test/photo.jpg">') + item(8, 'attachment', 'photo', 'inherit', '<wp:attachment_url>https://old.test/photo.jpg</wp:attachment_url>'))
+    await put(d, 'public/media/photo.jpg', 'bytes')
+    await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\nImportant inline alt\n![${alt}](/media/photo.jpg)`)
+    const r = await writeMigrationReports(d, m, layout)
+    expect(codes(r)).toContain('inline-alt-mismatch'); expect(r.qualityPassed).toBe(false)
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it('matches image occurrences in order, separately per item and from body only', async () => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1, 'post', 'hello', 'publish', '', '<img src="https://old.test/photo.jpg" alt="First context"><img src="https://old.test/photo.jpg" alt="Second context">') + item(8, 'attachment', 'photo', 'inherit', '<wp:attachment_url>https://old.test/photo.jpg</wp:attachment_url>'))
+    await put(d, 'public/media/photo.jpg', 'bytes')
+    for (const body of ['![First context](/media/photo.jpg)', '![Second context](/media/photo.jpg)\n![First context](/media/photo.jpg)', '![First context](/media/photo.jpg)\n![First context](/media/photo.jpg)']) {
+      await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\nextra: "![Second context](/media/photo.jpg)"\n---\n${body}`)
+      expect(codes(await inspectMigration(d, m, layout))).toContain('inline-alt-mismatch')
+    }
+    for (const body of ['![First context](/media/photo.jpg)\n![Second context](/media/photo.jpg)', '<img src="/media/photo.jpg" alt="First context"><img alt="Second context" src="/media/photo.jpg">']) {
+      await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
+      // HTML image alt does not contribute to prose, just like Markdown alt.
+      expect((await writeMigrationReports(d, m, layout)).qualityPassed).toBe(true)
+      expect((await validateMigrationReport(d)).passed).toBe(true)
+    }
+  })
+  it('never accepts another item or a code literal as inline-alt evidence', async () => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1, 'post', 'hello', 'publish', '', '<img src="https://old.test/photo.jpg" alt="Exact">') + item(2, 'post', 'other', 'publish', '', '<img src="https://old.test/photo.jpg" alt="Exact">') + item(8, 'attachment', 'photo', 'inherit', '<wp:attachment_url>https://old.test/photo.jpg</wp:attachment_url>'))
+    await put(d, 'public/media/photo.jpg', 'bytes')
+    await put(d, 'src/content/articles/other/index.mdoc', '---\ntitle: Hello\nauthor: alice\n---\n![Exact](/media/photo.jpg)')
+    for (const body of ['![](/media/photo.jpg)', '`![Exact](/media/photo.jpg)`', '```md\n![Exact](/media/photo.jpg)\n```']) {
+      await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
+      const r = await inspectMigration(d, m, layout)
+      expect(r.items[0].findings.map(f => f.code)).toContain('inline-alt-mismatch')
+    }
+  })
+  it('rejects empty attachments instead of treating their empty hash as migration evidence', async () => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1) + item(8, 'attachment', 'photo', 'inherit', '<wp:attachment_url>https://old.test/photo.jpg</wp:attachment_url><wp:post_mime_type>image/jpeg</wp:post_mime_type>'))
+    await put(d, 'public/media/photo.jpg', '')
+    const r = await writeMigrationReports(d, m, layout)
+    expect(r.media[0].status).toBe('failed'); expect(r.media[0].findings.map(f => f.code)).toContain('empty-media')
+    expect(r.qualityPassed).toBe(false); expect((await validateMigrationReport(d)).passed).toBe(false)
   })
   it('fails closed for missing, malformed, incomplete and empty reports', async () => {
     const d = await temp(); expect((await validateMigrationReport(d)).passed).toBe(false)

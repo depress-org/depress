@@ -1275,10 +1275,8 @@ PUBLIC_SITE=false
 
 // ── Main scaffold function ────────────────────────────────────────────────────
 
-export async function scaffoldAstroProject(
-  opts: ScaffoldOptions,
-  outputDir: string,
-): Promise<void> {
+/** Shared canonical source bytes: the report verifier uses these, never a green label. */
+export function scaffoldFiles(opts: ScaffoldOptions): Array<[string, string]> {
   const { siteTitle, siteDescription, siteUrl, authorName, navItems, allMenus, homepageType, homepageRef, hasCategories, hasTags } = opts
 
   const writes: Array<[string, string]> = [
@@ -1321,7 +1319,11 @@ export async function scaffoldAstroProject(
     ...(hasCategories ? [['src/pages/category/[slug].astro', genCategorySlugPage()] as [string, string]] : []),
   ]
 
-  for (const [relPath, content] of writes) {
+  return writes
+}
+
+export async function scaffoldAstroProject(opts: ScaffoldOptions, outputDir: string): Promise<void> {
+  for (const [relPath, content] of scaffoldFiles(opts)) {
     const fullPath = join(outputDir, relPath)
     await mkdir(join(outputDir, relPath, '..'), { recursive: true })
     // Don't overwrite keystatic.config.ts if already written by generate-config
