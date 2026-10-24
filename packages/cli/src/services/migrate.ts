@@ -12,6 +12,7 @@ import {
   safeSegment,
   assertUniqueSegments,
   assertSafeTree,
+  containedPath,
   safeWriteFile,
   scaffoldAstroProject,
   provisionTheme,
@@ -38,9 +39,10 @@ export function resolveWp2mdBin(): string {
   )
 }
 async function tempRoot() {
-  const root = resolve('.tmp')
-  await mkdir(root, { recursive: true })
-  return root
+  // Preflight the root AND every ancestor before mkdir/mkdtemp can follow a
+  // pre-existing symlink or create a case/NFC alias. Do not scan unrelated
+  // scratch children: other jobs/generated consumers can legitimately be here.
+  return containedPath(resolve('.tmp'), '.')
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
