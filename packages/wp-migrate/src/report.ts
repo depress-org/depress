@@ -183,7 +183,7 @@ async function privacyInventory(root: string, layout: ReportLayout, eligible: So
       // Do not follow aliases/cycles or silently skip unreadable/escaped trees.
       if (entry.isSymbolicLink()) throw new UnsafePath('Unproven content/public symlink')
       if (entry.isDirectory()) await walk(child, content)
-      else if (entry.isFile() && /\.(?:mdoc|md|mdx|html?)$/i.test(entry.name)) {
+      else if (entry.isFile() && /\.(?:mdoc|md|mdx|html?|xhtml)$/i.test(entry.name)) {
         if (content && child.split('/').includes('_drafts')) editors.push(child)
         else if (!expected.has(child)) unknown.push(child)
       }

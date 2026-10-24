@@ -242,7 +242,7 @@ describe('source inventory and migration reports', () => {
     await put(d, 'src/content/pages/section/_drafts/deeper/unrelated/index.mdoc', 'Changed editor bytes')
     expect((await validateMigrationReport(d)).passed).toBe(false)
   })
-  it.each(['src/content/articles/nested/unknown/index.mdoc', 'src/content/pages/nested/unknown.mdoc', 'public/renamed/deeper/index.html'])('rejects unclaimed public document %s even with no matching private inventory', async path => {
+  it.each(['src/content/articles/nested/unknown/index.mdoc', 'src/content/pages/nested/unknown.mdoc', 'src/content/pages/nested/unknown.xhtml', 'public/renamed/deeper/index.html', 'public/renamed/deeper/index.htm', 'public/renamed/deeper/index.xhtml', 'public/renamed/deeper/index.XHTML', 'public/renamed/deeper/index.xHtMl'])('rejects unclaimed public document %s even with no matching private inventory', async path => {
     const d = await temp(); await good(d)
     await writeMigrationReports(d, manifest(), layout)
     await put(d, path, '---\nslug: unrelated\n---\nUnknown source body')
@@ -250,6 +250,20 @@ describe('source inventory and migration reports', () => {
     const r = await writeMigrationReports(d, manifest(), layout)
     expect(r.qualityPassed).toBe(false); expect(codes(r)).toContain('untracked-public-output')
     expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it('keeps ordinary safe media and config assets outside the bounded document inventory', async () => {
+    const d = await temp(); await good(d)
+    await writeMigrationReports(d, manifest(), layout)
+    for (const [path, bytes] of [
+      ['public/media/ordinary.png', 'ordinary image fixture'],
+      ['public/media/icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>'],
+      ['public/media/ordinary.pdf', '%PDF-1.4\n% harmless fixture'],
+      ['public/site.webmanifest', '{"name":"Fixture"}'],
+      ['public/config.json', '{"safe":true}'],
+    ]) await put(d, path, bytes)
+    expect((await validateMigrationReport(d)).passed).toBe(true)
+    expect((await writeMigrationReports(d, manifest(), layout)).qualityPassed).toBe(true)
+    expect((await validateMigrationReport(d)).passed).toBe(true)
   })
   it.each([undefined, 'src/content/unrelated'])('does not hide active canonical pages when pagesDir is %s', async pagesDir => {
     const d = await temp()

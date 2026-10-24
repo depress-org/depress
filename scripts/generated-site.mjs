@@ -46,6 +46,8 @@ assert(!blog.includes('Secret fixture draft'), 'Draft leaked into listing')
 const manifest = JSON.parse(readFileSync(join(site, 'source-manifest.json')))
 const { verifyNestedPrivacy } = await import('./generated-nested-privacy.mjs')
 await verifyNestedPrivacy(root, site, manifest, report.layout)
+const { verifyPublicHtmlPrivacy } = await import('./generated-public-html-privacy.mjs')
+await verifyPublicHtmlPrivacy(root, site, manifest, report.layout)
 // Native #24 deliberately emits no drafts. Seed the same explicit editor-store
 // fixture to retain report34's canonical-reader publication negative controls.
 mkdirSync(join(site, 'src/content/articles/_drafts/secret-draft'), { recursive: true })
