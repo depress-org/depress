@@ -1,7 +1,7 @@
 // #36 / PR-05: exercise real npm artifacts, never workspace links or publication.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, copyFileSync, lstatSync, existsSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, copyFileSync, lstatSync, existsSync, renameSync, rmSync } from 'node:fs'
 import { resolve, join, dirname, delimiter } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
@@ -95,24 +95,101 @@ try {
       mustRun(site + '-install', 'npm', ['install', '--legacy-peer-deps'], directory)
       assert.equal(lstatSync(join(directory, 'node_modules')).isSymbolicLink(), false)
       mustRun(site + '-check-build', bin, ['check', '--dir', directory], consumer)
-      for (const file of ['source-manifest.json', 'migration-report.json', 'migration-report.md']) assert.equal(existsSync(join(directory, 'dist', file)), false)
     }
-    for (const [route, title, marker] of [
-      ['blog/first-post', 'First fixture post', 'First body marker alpha.'],
-      ['blog/second-post', 'Second fixture post', 'Second body marker beta.'],
-      ['about', 'About fixture page', 'Page body marker gamma.'],
+    // CF14 changed the filesystem artifact layout, NOT the public permalinks.
+    // Require its exact client/server contract; never search/fall back to a stale
+    // dist root (and never treat client-only checks as Pages deploy approval).
+    const scaffoldPublic = join(consumer, 'scaffold-site/dist/client')
+    const mediaPublic = join(consumer, 'library-media/dist/client')
+    const verifyRendered = () => {
+      for (const site of ['scaffold-site', 'library-media']) {
+        const directory = join(consumer, site)
+        assert(lstatSync(join(directory, 'dist/client')).isDirectory())
+        assert(lstatSync(join(directory, 'dist/server/wrangler.json')).isFile())
+        assert(lstatSync(join(directory, '.wrangler/deploy/config.json')).isFile())
+        for (const output of ['dist', 'dist/client', 'dist/server']) {
+          for (const file of ['source-manifest.json', 'migration-report.json', 'migration-report.md']) assert.equal(existsSync(join(directory, output, file)), false, `${output}/${file} must stay private`)
+        }
+      }
+      for (const [route, title, marker] of [
+        ['blog/first-post', 'First fixture post', 'First body marker alpha.'],
+        ['blog/second-post', 'Second fixture post', 'Second body marker beta.'],
+        ['about', 'About fixture page', 'Page body marker gamma.'],
+      ]) {
+        const html = readFileSync(join(scaffoldPublic, route, 'index.html'), 'utf8')
+        assert(html.includes(title) && html.includes(marker), `Scaffold generated route lost: ${route}`)
+      }
+      assert.equal(existsSync(join(scaffoldPublic, 'blog/secret-draft/index.html')), false)
+      assert(!readFileSync(join(scaffoldPublic, 'blog/index.html'), 'utf8').includes('Secret fixture draft'))
+      const redirects = readFileSync(join(scaffoldPublic, '_redirects'), 'utf8')
+      for (const line of ['/2024/01/first-post/  /blog/first-post/  301', '/?p=101  /blog/first-post/  301', '/2024/01/second-post/  /blog/second-post/  301', '/2024/01/about/  /about/  301']) assert(redirects.includes(line), `Original permalink redirect lost: ${line}`)
+      const html = readFileSync(join(mediaPublic, 'blog/archive-post/index.html'), 'utf8')
+      assert(html.includes('<title>Installed fixture SEO title — Offline archive fixture</title>'), 'Generated title must preserve Yoast title with the scaffold site suffix')
+      assert(/<meta\b[^>]*name="description"[^>]*content="Installed fixture SEO description"/.test(html))
+      assert(html.includes('Archive body marker.'))
+      const images = [...html.matchAll(/<img\b[^>]*>/g)].map(m => m[0])
+      for (const alt of ['Inline context one', 'Inline context two', 'Attachment fallback']) assert(images.some(image => image.includes(`alt="${alt}"`) && image.includes('/media/photo.png')))
+      assert.deepEqual(readFileSync(join(mediaPublic, 'media/photo.png')), readFileSync(join(consumer, 'photo.png')))
+    }
+    verifyRendered()
+    // Mutate the ACTUAL cold built artifacts: representative route, content,
+    // metadata, media and privacy regressions must reject, then restored bytes pass.
+    const negatives = [
+      ['route', join(scaffoldPublic, 'blog/first-post/index.html'), null],
+      ['title', join(scaffoldPublic, 'blog/first-post/index.html'), text => text.replaceAll('First fixture post', 'Lost title')],
+      ['body', join(scaffoldPublic, 'blog/first-post/index.html'), text => text.replaceAll('First body marker alpha.', 'Lost body')],
+      ['page', join(scaffoldPublic, 'about/index.html'), null],
+      ['permalink', join(scaffoldPublic, '_redirects'), text => text.replaceAll('/blog/first-post/', '/wrong/')],
+      ['seo-title', join(mediaPublic, 'blog/archive-post/index.html'), text => text.replaceAll('Installed fixture SEO title', 'Lost SEO title')],
+      ['seo-description', join(mediaPublic, 'blog/archive-post/index.html'), text => text.replaceAll('Installed fixture SEO description', 'Lost description')],
+      ['media-body', join(mediaPublic, 'blog/archive-post/index.html'), text => text.replaceAll('Archive body marker.', 'Lost archive body')],
+      ...['Inline context one', 'Inline context two', 'Attachment fallback'].map(alt => ['alt:' + alt, join(mediaPublic, 'blog/archive-post/index.html'), text => text.replaceAll(`alt="${alt}"`, 'alt="lost"')]),
+      ['media-bytes', join(mediaPublic, 'media/photo.png'), () => 'wrong media bytes'],
+      ['draft-listing', join(scaffoldPublic, 'blog/index.html'), text => text + 'Secret fixture draft'],
+    ]
+    report.renderedNegativeControls = []
+    for (const [label, file, mutate] of negatives) {
+      const bytes = readFileSync(file)
+      try {
+        if (mutate) writeFileSync(file, mutate(bytes.toString('utf8')))
+        else renameSync(file, file + '.negative-control')
+        assert.throws(verifyRendered, undefined, `Rendered negative accepted: ${label}`)
+      } finally {
+        if (!mutate) renameSync(file + '.negative-control', file)
+        else writeFileSync(file, bytes)
+      }
+      verifyRendered()
+      report.renderedNegativeControls.push(label)
+      save()
+    }
+    for (const [label, file] of [
+      ['draft-route', join(scaffoldPublic, 'blog/secret-draft/index.html')],
+      ...['source-manifest.json', 'migration-report.json', 'migration-report.md'].map(name => ['private:' + name, join(scaffoldPublic, name)]),
     ]) {
-      const html = readFileSync(join(consumer, 'scaffold-site/dist', route, 'index.html'), 'utf8')
-      assert(html.includes(title) && html.includes(marker), `Scaffold generated route lost: ${route}`)
+      assert(!existsSync(file))
+      mkdirSync(dirname(file), { recursive: true })
+      try {
+        writeFileSync(file, 'private negative fixture')
+        assert.throws(verifyRendered, undefined, `Private negative accepted: ${label}`)
+      } finally { rmSync(file) }
+      verifyRendered()
+      report.renderedNegativeControls.push(label)
+      save()
     }
-    assert.equal(existsSync(join(consumer, 'scaffold-site/dist/blog/secret-draft/index.html')), false)
-    const html = readFileSync(join(consumer, 'library-media/dist/blog/archive-post/index.html'), 'utf8')
-    assert(html.includes('<title>Installed fixture SEO title — Offline archive fixture</title>'), 'Generated title must preserve Yoast title with the scaffold site suffix')
-    assert(/<meta\b[^>]*name="description"[^>]*content="Installed fixture SEO description"/.test(html))
-    assert(html.includes('Archive body marker.'))
-    const images = [...html.matchAll(/<img\b[^>]*>/g)].map(m => m[0])
-    for (const alt of ['Inline context one', 'Inline context two', 'Attachment fallback']) assert(images.some(image => image.includes(`alt="${alt}"`) && image.includes('/media/photo.png')))
-    assert.deepEqual(readFileSync(join(consumer, 'library-media/dist/media/photo.png')), readFileSync(join(consumer, 'photo.png')))
+    // Reinstall/rebuild the generated sites from their UNCHANGED locks too,
+    // then repeat every positive semantic assertion on the new build bytes.
+    report.generatedLockSha256 = {}
+    for (const site of ['scaffold-site', 'library-media']) {
+      const directory = join(consumer, site)
+      const lock = readFileSync(join(directory, 'package-lock.json'))
+      mustRun(site + '-same-lock-ci', 'npm', ['ci', '--legacy-peer-deps'], directory)
+      mustRun(site + '-same-lock-check-build', bin, ['check', '--dir', directory], consumer)
+      assert.deepEqual(readFileSync(join(directory, 'package-lock.json')), lock)
+      report.generatedLockSha256[site] = createHash('sha256').update(lock).digest('hex')
+      save()
+    }
+    verifyRendered()
+    console.log(`PASS: exact CF14 client routes/permalinks/body/media/metadata/privacy; ${report.renderedNegativeControls.length} real-artifact negatives and unchanged-lock rebuilds`)
     // #26 owns the DEFAULT toolchain and complete report/build support. Run it
     // for real, report nonzero faithfully, and offer a strict release gate below.
     const defaultDirectory = join(consumer, 'default-site')
