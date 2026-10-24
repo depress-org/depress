@@ -1,5 +1,5 @@
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
+import { safeWriteFile, assertSafeTree } from './input-boundary.js'
+import { sourceString } from './themes/serialization.js'
 import type { NavItem } from '@depress-org/core'
 
 
@@ -99,7 +99,7 @@ function fixCircularAstroChunks() {
 export default defineConfig({
   output: 'hybrid',
   adapter: cloudflare(),
-  site: '${url}',
+  site: ${sourceString(url)},
   integrations: [
     react(),
     tailwind({ applyBaseStyles: false }),
@@ -218,6 +218,7 @@ function genNavigationJson(navItems: NavItem[], allMenus?: Record<string, NavIte
 
 function genBaseLayout(siteTitle: string): string {
   return `---
+const siteTitle = ${sourceString(siteTitle)}
 import Header from '../components/layout/Header.astro'
 import Footer from '../components/layout/Footer.astro'
 import '../styles/global.css'
@@ -244,7 +245,7 @@ const { title, description = '' } = Astro.props
       })()
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>{title} — ${siteTitle}</title>
+    <title>{title} — {siteTitle}</title>
   </head>
   <body class="min-h-screen flex flex-col bg-bg text-body font-sans">
     <Header />
@@ -259,6 +260,7 @@ const { title, description = '' } = Astro.props
 
 function genHeaderAstro(siteTitle: string): string {
   return `---
+const siteTitle = ${sourceString(siteTitle)}
 import navData from '../../data/navigation.json'
 
 type NavItem = { label: string; href: string; children?: NavItem[] }
@@ -273,7 +275,7 @@ function isActive(href: string) {
 <header class="nav-header">
   <div class="nav-inner">
     <!-- Logo -->
-    <a href="/" class="nav-logo">${siteTitle}</a>
+    <a href="/" class="nav-logo">{siteTitle}</a>
 
     <!-- Desktop nav -->
     <ul class="nav-list">
@@ -623,12 +625,13 @@ function isActive(href: string) {
 
 function genFooterAstro(siteTitle: string): string {
   return `---
+const siteTitle = ${sourceString(siteTitle)}
 const year = new Date().getFullYear()
 ---
 
 <footer class="border-t border-border bg-surface mt-auto">
   <div class="container mx-auto px-4 max-w-3xl py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted">
-    <p>&copy; {year} ${siteTitle}. All rights reserved.</p>
+    <p>&copy; {year} {siteTitle}. All rights reserved.</p>
     <p>
       Built with <a href="https://astro.build" class="hover:text-body transition-colors">Astro</a>
       {' '}+{' '}
@@ -700,8 +703,8 @@ const siteConfigData = parse(siteConfigYaml)
 
 const homepageType = siteConfigData?.homepageType ?? 'latest_posts'
 const homepageRef = siteConfigData?.homepageRef ?? ''
-const pageSiteTitle = siteConfigData?.siteTitle ?? '${siteTitle}'
-const pageSiteDescription = siteConfigData?.siteDescription ?? '${siteDescription}'
+const pageSiteTitle = siteConfigData?.siteTitle ?? ${sourceString(siteTitle)}
+const pageSiteDescription = siteConfigData?.siteDescription ?? ${sourceString(siteDescription)}
 
 let pageEntry: any = null
 let articles: any[] = []
@@ -1186,7 +1189,7 @@ ${categoriesCollection}${tagsCollection}
       label: 'Site Settings',
       path: 'site-config',
       schema: {
-        siteTitle: fields.text({ label: 'Site Title', defaultValue: '${siteTitle}' }),
+        siteTitle: fields.text({ label: 'Site Title', defaultValue: ${sourceString(siteTitle)} }),
         siteDescription: fields.text({ label: 'Site Description', multiline: true }),
         authorName: fields.text({ label: 'Author Name' }),
         authorBio: fields.text({ label: 'Author Bio', multiline: true }),
@@ -1281,6 +1284,7 @@ export async function scaffoldAstroProject(
 ): Promise<void> {
   const { siteTitle, siteDescription, siteUrl, authorName, navItems, allMenus, homepageType, homepageRef, hasCategories, hasTags } = opts
 
+  await assertSafeTree(outputDir)
   const writes: Array<[string, string]> = [
     // Root config files
     ['package.json', genPackageJson(siteTitle)],
@@ -1322,10 +1326,7 @@ export async function scaffoldAstroProject(
   ]
 
   for (const [relPath, content] of writes) {
-    const fullPath = join(outputDir, relPath)
-    await mkdir(join(outputDir, relPath, '..'), { recursive: true })
-    // Don't overwrite keystatic.config.ts if already written by generate-config
-    await writeFile(fullPath, content, 'utf-8')
+    await safeWriteFile(outputDir, relPath, content)
   }
 }
 

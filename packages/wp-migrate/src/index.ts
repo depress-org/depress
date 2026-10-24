@@ -1,3 +1,5 @@
+export { safeSegment, assertUniqueSegments, assertSafeTree, safeWriteFile, containedPath } from './input-boundary.js'
+export { convertSafeExport, validateExportPaths } from './safe-convert.js'
 // WordPress Migration Engine
 export { parseWPExport } from './parser.js'
 export { readWPDatabase } from './db-reader.js'

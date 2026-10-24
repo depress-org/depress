@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, mkdtemp, rm, readdir } from 'fs/promises'
+import { readFile, mkdir, mkdtemp, rm, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { checkedSpawn, safeEnvironment, ServiceError } from './process.js'
@@ -7,7 +7,12 @@ import {
   parseWPExport,
   readWPDatabase,
   parseNavFromXml,
-  transformWp2mdOutput,
+  convertSafeExport,
+  validateExportPaths,
+  safeSegment,
+  assertUniqueSegments,
+  assertSafeTree,
+  safeWriteFile,
   scaffoldAstroProject,
   provisionTheme,
   clearSampleContent,
@@ -32,173 +37,6 @@ export function resolveWp2mdBin(): string {
     'wordpress-export-to-markdown/app.js',
   )
 }
-// ── Helper: run wp2md stage 1 ─────────────────────────────────────────────────
-async function runWp2mdStage1(opts: {
-  inputXml: string
-  wpDir?: string
-  outputDir: string
-}): Promise<void> {
-  const { inputXml, wpDir, outputDir } = opts
-  await mkdir(outputDir, { recursive: true })
-  let effectiveInput = inputXml
-  let serverStop: (() => void) | undefined
-  let tmpXmlPath: string | undefined
-  try {
-    if (wpDir && existsSync(wpDir)) {
-      const { createServer } = await import('http')
-      const { createReadStream } = await import('fs')
-      const { extname: ext } = await import('path')
-      const MIME_MAP: Record<string, string> = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-      }
-      const server = createServer((req, res) => {
-        let rawPath = (req.url ?? '/').split('?')[0]
-        try {
-          rawPath = decodeURIComponent(rawPath)
-        } catch {
-          /* keep */
-        }
-        const filePath = resolve(wpDir, '.' + rawPath)
-        if (!filePath.startsWith(resolve(wpDir) + '/')) {
-          res.writeHead(403)
-          res.end()
-          return
-        }
-        if (!existsSync(filePath)) {
-          res.writeHead(404)
-          res.end()
-          return
-        }
-        const ct =
-          MIME_MAP[ext(filePath).toLowerCase()] ?? 'application/octet-stream'
-        res.writeHead(200, { 'Content-Type': ct })
-        const stream = createReadStream(filePath)
-        stream.on('error', () => res.destroy())
-        stream.pipe(res)
-      })
-      const port = await new Promise<number>((res, rej) => {
-        server.listen(0, '127.0.0.1', () => {
-          const addr = server.address()
-          if (addr && typeof addr !== 'string') res(addr.port)
-          else rej(new Error('Could not bind server'))
-        })
-        server.on('error', rej)
-      })
-      const localBase = `http://127.0.0.1:${port}`
-      serverStop = () => {
-        server.closeAllConnections()
-        server.close()
-      }
-      const rawXml = await readFile(inputXml, 'utf-8')
-      const siteUrlMatch = rawXml.match(/<link>(https?:\/\/[^<]+)<\/link>/)
-      const siteUrl = siteUrlMatch
-        ? siteUrlMatch[1].trim()
-        : 'https://example.com'
-      let patched = rawXml
-      try {
-        const u = new URL(siteUrl)
-        for (const variant of [
-          u.origin,
-          u.origin.replace(/^https:\/\//, 'http://'),
-          u.origin.replace(/^http:\/\//, 'https://'),
-        ]) {
-          patched = patched.split(variant).join(localBase)
-        }
-      } catch {
-        /* ignore */
-      }
-      patched = patched.split('http://127.0.0.1/wp/').join(`${localBase}/`)
-      patched = patched.split('https://127.0.0.1/wp/').join(`${localBase}/`)
-      patched = patched.replace(
-        /(<wp:attachment_url><!\[CDATA\[)(\/wp-content\/)/g,
-        `$1${localBase}$2`,
-      )
-      patched = patched.replace(
-        /<link>(\/[^<]*)<\/link>/g,
-        `<link>${localBase}$1</link>`,
-      )
-      const tmpXmlDir = await mkdtemp(join(await tempRoot(), 'depress-xml-'))
-      tmpXmlPath = join(tmpXmlDir, 'patched.xml')
-      await writeFile(tmpXmlPath, patched, 'utf-8')
-      effectiveInput = tmpXmlPath
-    }
-    // Always patch relative <link> elements so wp2md can resolve scraped image URLs,
-    // even when no local media server is running. Read from either the already-patched
-    // tmpXmlPath (wpDir flow) or the original inputXml.
-    {
-      const xmlToCheck = tmpXmlPath ?? inputXml
-      const xmlContent = await readFile(xmlToCheck, 'utf-8')
-      if (xmlContent.includes('<link>/')) {
-        const siteUrlMatch = xmlContent.match(
-          /<channel>[\s\S]*?<link>(https?:\/\/[^<]+)<\/link>/,
-        )
-        const siteOrigin = siteUrlMatch
-          ? (() => {
-              try {
-                return new URL(siteUrlMatch[1].trim()).origin
-              } catch {
-                return ''
-              }
-            })()
-          : ''
-        if (siteOrigin) {
-          const patched = xmlContent.replace(
-            /<link>(\/[^<]*)<\/link>/g,
-            `<link>${siteOrigin}$1</link>`,
-          )
-          if (patched !== xmlContent) {
-            if (!tmpXmlPath) {
-              const tmpXmlDir = await mkdtemp(
-                join(await tempRoot(), 'depress-xml-'),
-              )
-              tmpXmlPath = join(tmpXmlDir, 'patched.xml')
-            }
-            await writeFile(tmpXmlPath, patched, 'utf-8')
-            effectiveInput = tmpXmlPath
-          }
-        }
-      }
-    }
-    const binPath = resolveWp2mdBin()
-    const conversion = await checkedSpawn(
-      process.execPath,
-      [
-        binPath,
-        '--wizard=false',
-        '--input=' + effectiveInput,
-        '--output=' + outputDir,
-        '--save-images=all',
-        '--post-folders=true',
-        '--prefix-date=false',
-        '--date-folders=none',
-        '--strict-ssl=true',
-        '--request-delay=100',
-        '--write-delay=10',
-      ],
-      { cwd: outputDir, env: safeEnvironment(resolve(outputDir, '..')) },
-    )
-    // Upstream app.js catches exceptions without setting a nonzero exit status.
-    if (
-      !conversion.stdout.includes('All done!') ||
-      conversion.stdout.includes('execution halted early')
-    )
-      throw new ServiceError(
-        'CONVERSION_FAILED',
-        'WordPress conversion did not complete',
-      )
-  } finally {
-    if (serverStop) serverStop()
-    if (tmpXmlPath) {
-      const tmpXmlDir = tmpXmlPath.replace(/\/patched\.xml$/, '')
-      await rm(tmpXmlDir, { recursive: true, force: true }).catch(() => {})
-    }
-  }
-}
-
 async function tempRoot() {
   const root = resolve('.tmp')
   await mkdir(root, { recursive: true })
@@ -220,6 +58,7 @@ export async function migrateSite(options: MigrateOptions) {
 
 async function migrate(options: MigrateOptions) {
   const outputDir = resolve(options.output)
+  await assertSafeTree(outputDir)
   const inputFile = await resolveInput(options.input)
   if (!inputFile)
     throw new ServiceError('MISSING_INPUT', 'WordPress XML input is required')
@@ -239,6 +78,7 @@ async function migrate(options: MigrateOptions) {
   const adapter = themeId ? getThemeAdapter(themeId) : null
   if (themeId && !adapter)
     throw new ServiceError('INVALID_THEME', 'Unknown theme')
+  if (adapter && adapter.fileExt !== 'md') throw new ServiceError('UNSAFE_CONTENT_THEME', 'MDX-only themes are disabled for untrusted content')
   if (adapter && !adapter.bundled)
     throw new ServiceError(
       'REMOTE_THEME_DISABLED',
@@ -280,6 +120,7 @@ async function migrate(options: MigrateOptions) {
   let xmlContent: string
   try {
     xmlContent = await readFile(inputFile, 'utf-8')
+    if (/<!DOCTYPE|<!ENTITY/i.test(xmlContent)) throw new Error('XML DTD/entities disabled')
     const { XMLValidator } = await import('fast-xml-parser')
     if (XMLValidator.validate(xmlContent) !== true)
       throw new Error('Malformed XML')
@@ -290,6 +131,7 @@ async function migrate(options: MigrateOptions) {
       'Migration failed: invalid input or conversion error',
     )
   }
+  validateExportPaths(wpExport)
   const allMenus = parseNavFromXml(
     xmlContent!,
     wpExport.posts,
@@ -299,48 +141,12 @@ async function migrate(options: MigrateOptions) {
   // Primary menu: prefer 'main', then 'primary', then first available
   const navItems =
     allMenus['main'] ?? allMenus['primary'] ?? Object.values(allMenus)[0] ?? []
-  // Step 2: Run wp2md stage 1
+  // Step 2: Bounded native conversion (no upstream subprocess)
   const tmpDir = await mkdtemp(join(await tempRoot(), 'depress-migrate-'))
-  const wp2mdOut = join(tmpDir, 'wp2md')
   try {
-    try {
-      await runWp2mdStage1({ inputXml: inputFile, wpDir, outputDir: wp2mdOut })
-    } catch (err) {
-      await rm(tmpDir, { recursive: true, force: true })
-      throw new ServiceError(
-        'MIGRATION_FAILED',
-        'Migration failed: invalid input or conversion error',
-      )
-    }
-    let transformResult: Awaited<ReturnType<typeof transformWp2mdOutput>>
-    // For theme mode, write to tmpDir so scaffold/theme files stay separate
+    // Input validation runs before conversion; upstream wp2md is never invoked.
     const contentDest = adapter ? join(tmpDir, 'content') : outputDir
-    try {
-      await mkdir(contentDest, { recursive: true })
-      const categoryNames = new Map(
-        wpExport.categories.map((c) => [c.slug, c.name]),
-      )
-      const authorsBySlug = new Map(
-        wpExport.posts
-          .filter((p: { author?: string }) => p.author && p.author.trim())
-          .map(
-            (p: { slug: string; author: string }) =>
-              [p.slug, p.author] as const,
-          ),
-      )
-      transformResult = await transformWp2mdOutput({
-        wp2mdDir: wp2mdOut,
-        outputDir: contentDest,
-        categoryNames,
-        authorsBySlug,
-      })
-    } catch (err) {
-      await rm(tmpDir, { recursive: true, force: true })
-      throw new ServiceError(
-        'MIGRATION_FAILED',
-        'Migration failed: invalid input or conversion error',
-      )
-    }
+    const transformResult = await convertSafeExport(wpExport, contentDest, wpDir)
     // Step 3b: Generate redirect map
     const redirectMap: Record<string, string> = {}
     const netlifyRedirects: string[] = [
@@ -362,16 +168,8 @@ async function migrate(options: MigrateOptions) {
       }
     }
     await mkdir(outputDir, { recursive: true })
-    await writeFile(
-      join(outputDir, 'redirects.json'),
-      JSON.stringify(redirectMap, null, 2) + '\n',
-      'utf-8',
-    )
-    await writeFile(
-      join(outputDir, '_redirects'),
-      netlifyRedirects.join('\n') + '\n',
-      'utf-8',
-    )
+    await safeWriteFile(outputDir, 'redirects.json', JSON.stringify(redirectMap, null, 2) + '\n')
+    await safeWriteFile(outputDir, '_redirects', netlifyRedirects.join('\n') + '\n')
     if (adapter) {
       // ── Theme mode ──────────────────────────────────────────────────────────
 
@@ -489,22 +287,23 @@ export async function writeTaxonomy(
   }>,
   outputDir: string,
 ): Promise<void> {
+  assertUniqueSegments(categories.map(c => c.slug))
+  assertUniqueSegments(tags.map(t => t.slug))
+  await assertSafeTree(outputDir)
   const catDir = join(outputDir, 'src', 'content', 'categories')
   await mkdir(catDir, { recursive: true })
   for (const cat of categories) {
-    await writeFile(
-      join(catDir, `${cat.slug}.yaml`),
+    await safeWriteFile(outputDir,
+      join('src/content/categories', `${safeSegment(cat.slug)}.yaml`),
       `name: ${JSON.stringify(cat.name)}\ndescription: ${JSON.stringify(cat.description ?? '')}\n`,
-      'utf-8',
     )
   }
   const tagDir = join(outputDir, 'src', 'content', 'tags')
   await mkdir(tagDir, { recursive: true })
   for (const tag of tags) {
-    await writeFile(
-      join(tagDir, `${tag.slug}.yaml`),
+    await safeWriteFile(outputDir,
+      join('src/content/tags', `${safeSegment(tag.slug)}.yaml`),
       `name: ${JSON.stringify(tag.name)}\n`,
-      'utf-8',
     )
   }
 }

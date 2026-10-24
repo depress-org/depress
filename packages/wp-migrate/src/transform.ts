@@ -1,31 +1,7 @@
 import type { WPPost, MigrationReport } from '@depress-org/core'
 import TurndownService from 'turndown'
-import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
-
-const turndown = new TurndownService({
-  headingStyle: 'atx',
-  codeBlockStyle: 'fenced',
-  bulletListMarker: '-',
-})
-
-// Preserve iframe embeds rather than dropping them
-turndown.addRule('iframe-video', {
-  filter: 'iframe',
-  replacement: (_content, node) => {
-    const src = (node as Element).getAttribute('src') ?? ''
-    if (!src) return ''
-    if (src.includes('youtube.com') || src.includes('youtu.be')) {
-      const id = src.match(/(?:embed\/|v=|youtu\.be\/)([A-Za-z0-9_-]+)/)?.[1]
-      return id ? `\nhttps://www.youtube.com/watch?v=${id}\n` : `\n<!-- youtube: ${src} -->\n`
-    }
-    if (src.includes('vimeo.com')) {
-      const id = src.match(/vimeo\.com\/(?:video\/)?(\d+)/)?.[1]
-      return id ? `\nhttps://vimeo.com/${id}\n` : `\n<!-- vimeo: ${src} -->\n`
-    }
-    return `\n<!-- iframe: ${src} -->\n`
-  },
-})
+import { safeSegment, assertUniqueSegments, assertSafeTree, safeWriteFile } from './input-boundary.js'
 
 /**
  * Transform WordPress posts to Markdoc files
@@ -33,7 +9,27 @@ turndown.addRule('iframe-video', {
 export async function transformPosts(
   posts: WPPost[],
   outputDir: string,
+  mediaMapping = new Map<string, string>(),
 ): Promise<MigrationReport> {
+  for (const type of ['post', 'page']) assertUniqueSegments(posts.filter(p => p.type === type).map(p => p.slug))
+  await assertSafeTree(outputDir)
+  const converter = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
+  converter.remove(node => ['SCRIPT', 'STYLE', 'OBJECT', 'EMBED', 'FORM', 'INPUT', 'SVG', 'MATH'].includes(node.nodeName))
+  converter.addRule('safe-links', { filter: 'a', replacement: (text, node) => {
+    const href = (node as Element).getAttribute('href') ?? ''
+    if (!/^(https?:\/\/|mailto:|\/(?!\/)|#)/i.test(href) || /[\s\x00-\x1f()<>\\]/.test(href)) return text
+    return `[${text}](${href})`
+  } })
+  converter.addRule('safe-images', { filter: 'img', replacement: (_text, node) => {
+    const src = (node as Element).getAttribute('src') ?? ''
+    const dest = mediaMapping.get(src)
+    return dest ? `![image](${encodeURI(dest)})` : ''
+  } })
+  converter.addRule('iframe-video', { filter: 'iframe', replacement: (_text, node) => {
+    const src = (node as Element).getAttribute('src') ?? ''
+    const id = src.match(/^https:\/\/(?:www\.)?youtube\.com\/embed\/([A-Za-z0-9_-]+)/)?.[1]
+    return id ? `\nhttps://www.youtube.com/watch?v=${id}\n` : ''
+  } })
   const report: MigrationReport = {
     total: posts.length,
     success: 0,
@@ -50,16 +46,17 @@ export async function transformPosts(
       }
 
       const { content: cleaned, warnings, shortcodeMarkers } = handleShortcodes(post.content)
-      const markdown = applyShortcodeMarkers(turndown.turndown(cleaned), shortcodeMarkers)
+      // Recovered shortcode bodies are literal text, never a second Markdown input.
+      const literalMarkers = shortcodeMarkers.map(marker => ({ ...marker, inner: marker.inner.replace(/[\\`*_{}\[\]()!#<>]/g, char => `&#${char.charCodeAt(0)};`) }))
+      const markdown = applyShortcodeMarkers(converter.turndown(cleaned), literalMarkers).replace(/</g, '&lt;').replace(/\{/g, '&#123;')
       const frontmatter = buildFrontmatter(post)
       const warnBlock = warnings.length > 0
         ? `\n<!-- depress-warnings: ${warnings.join(' | ')} -->\n`
         : ''
       const fileContent = `---\n${frontmatter}\n---\n${warnBlock}\n${markdown}`
 
-      const dir = join(outputDir, 'src', 'content', post.type === 'page' ? 'pages' : 'articles', post.slug)
-      await mkdir(dir, { recursive: true })
-      await writeFile(join(dir, 'index.mdoc'), fileContent, 'utf-8')
+      const dir = join('src', 'content', post.type === 'page' ? 'pages' : 'articles', safeSegment(post.slug))
+      await safeWriteFile(outputDir, join(dir, 'index.mdoc'), fileContent)
 
       report.success++
     } catch (error) {
@@ -155,14 +152,11 @@ function buildFrontmatter(post: WPPost): string {
   if (rawExcerpt) fields.excerpt = rawExcerpt
   if (post.seoTitle) fields.seoTitle = post.seoTitle
   if (post.seoDescription) fields.seoDescription = post.seoDescription
-  if (post.featuredImageUrl) fields.featuredImageUrl = post.featuredImageUrl
+  if (post.featuredImageUrl && post.featuredImageUrl.startsWith('/media/')) fields.coverImage = post.featuredImageUrl
 
   return Object.entries(fields)
     .map(([key, value]) => {
-      if (Array.isArray(value)) return `${key}:\n${value.map((v) => `  - ${v}`).join('\n')}`
-      if (typeof value === 'string' && value.includes('\n')) return `${key}: |\n  ${value.split('\n').join('\n  ')}`
-      if (typeof value === 'string') return `${key}: ${JSON.stringify(value)}`
-      return `${key}: ${value}`
+      return `${key}: ${JSON.stringify(value)}`
     })
     .join('\n')
 }

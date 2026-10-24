@@ -1,6 +1,10 @@
-import { readFile, writeFile } from 'fs/promises'
+import { readFile } from 'fs/promises'
+import { safeWriteFile, assertSafeTree } from '../input-boundary.js'
+import { dirname, basename } from 'node:path'
+const writeFile = async (path: string, data: string, _encoding: string) => safeWriteFile(dirname(path), basename(path), data)
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { sourceString, localHref } from './serialization.js'
 import type { ThemeAdapter, ArticleFM, PatchConfigOpts, NavItem } from './types.js'
 
 /**
@@ -44,6 +48,7 @@ export const rocketAdapter: ThemeAdapter = {
   },
 
   async patchConfig(outputDir: string, opts: PatchConfigOpts): Promise<void> {
+    await assertSafeTree(outputDir)
     // 1. Patch src/config/site.config.ts
     const siteConfigPath = join(outputDir, 'src', 'config', 'site.config.ts')
     if (existsSync(siteConfigPath)) {
@@ -52,17 +57,17 @@ export const rocketAdapter: ThemeAdapter = {
       // Replace name: 'Astro Rocket'
       cfg = cfg.replace(
         /(^\s*name\s*:\s*)(['"`])([^'"`\n]*)(\2)/m,
-        (_m, key, q, _old, qEnd) => `${key}${q}${opts.siteTitle}${qEnd}`,
+        (_m, key) => `${key}${sourceString(opts.siteTitle)}`,
       )
       // Replace description (first occurrence — the top-level site description)
       cfg = cfg.replace(
         /(^\s*description\s*:\s*)(['"`])([^'"`\n]*)(\2)/m,
-        (_m, key, q, _old, qEnd) => `${key}${q}${opts.siteDescription.slice(0, 200)}${qEnd}`,
+        (_m, key) => `${key}${sourceString(opts.siteDescription.slice(0, 200))}`,
       )
       // Replace author: 'Hans Martens'
       cfg = cfg.replace(
         /(^\s*author\s*:\s*)(['"`])([^'"`\n]*)(\2)/m,
-        (_m, key, q, _old, qEnd) => `${key}${q}${opts.authorName || opts.siteTitle}${qEnd}`,
+        (_m, key) => `${key}${sourceString(opts.authorName || opts.siteTitle)}`,
       )
 
       await writeFile(siteConfigPath, cfg, 'utf-8')
@@ -185,6 +190,6 @@ function serializeRocketNavItems(navItems: NavItem[]): string {
     : [{ label: 'Blog', href: '/blog', children: [] }]
 
   return items.map((item, i) =>
-    `  { label: ${JSON.stringify(item.label)}, href: ${JSON.stringify(item.href)}, order: ${i + 1} },\n`
+    `  { label: ${JSON.stringify(item.label)}, href: ${JSON.stringify(localHref(item.href))}, order: ${i + 1} },\n`
   ).join('')
 }

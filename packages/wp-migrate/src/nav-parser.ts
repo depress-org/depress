@@ -23,7 +23,7 @@ function getMeta(metas: any[], key: string): string {
 }
 
 function decodeSlug(slug: string): string {
-  try { return decodeURIComponent(slug) } catch { return slug }
+  try { return decodeURIComponent(slug).normalize('NFC') } catch { return slug }
 }
 
 interface RawNavItemWithMenu extends RawNavItem {

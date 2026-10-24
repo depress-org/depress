@@ -1,4 +1,5 @@
 import type { WPExport, KeystaticConfig } from '@depress-org/core'
+import { sourceString } from './themes/serialization.js'
 
 /**
  * Generate keystatic.config.ts based on analyzed WordPress content structure.
@@ -17,7 +18,7 @@ export function generateKeystaticConfig(wpExport: WPExport, repo: string): strin
 export default config({
   storage: {
     kind: 'github',
-    repo: '${repo}',
+    repo: ${sourceString(repo)},
   },
 
   collections: {

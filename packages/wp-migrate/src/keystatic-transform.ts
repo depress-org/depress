@@ -1,7 +1,10 @@
-import { readdir, readFile, writeFile, mkdir, copyFile } from 'fs/promises'
+import { readdir, readFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, basename, extname, dirname } from 'path'
 import matter from 'gray-matter'
+import { readRasterFile } from './media-file.js'
+import { MEDIA_LIMITS } from './media-fetch.js'
+import { assertSafeTree, safeSegment, assertUniqueSegments, safeWriteFile } from './input-boundary.js'
 
 export interface TransformOptions {
   /** Directory produced by wordpress-export-to-markdown (has posts/ and pages/ subdirs) */
@@ -132,17 +135,22 @@ async function collectAndCopyImages(
   if (!existsSync(sourceDir)) return { copied, failed }
 
   const entries = await readdir(sourceDir, { withFileTypes: true })
+  assertUniqueSegments(entries.map(e => e.name))
   for (const entry of entries) {
     if (!entry.isFile()) continue
     const ext = extname(entry.name).toLowerCase()
     if (!IMAGE_EXTS.has(ext)) continue
 
     const src = join(sourceDir, entry.name)
-    const targetName = uniqueFilename(entry.name, src, existing)
+    const targetName = safeSegment(entry.name)
+    if ([...existing.keys()].some(name => name.toLowerCase() === targetName.toLowerCase())) throw new Error('Media filename collision')
     existing.set(entry.name, targetName)
 
     try {
-      await copyFile(src, join(mediaDir, targetName))
+      const bytes = await readRasterFile(src, MEDIA_LIMITS.maxBytes)
+      const { rasterExtension } = await import('./media-fetch.js')
+      rasterExtension(bytes)
+      await safeWriteFile(mediaDir, targetName, bytes)
       copied++
     } catch (err) {
       failed.push(`${src}: ${err instanceof Error ? err.message : String(err)}`)
@@ -150,16 +158,6 @@ async function collectAndCopyImages(
   }
 
   return { copied, failed }
-}
-
-function uniqueFilename(name: string, srcPath: string, existing: Map<string, string>): string {
-  if (!existing.has(name)) return name
-  // Already registered with this exact source path → same file, reuse
-  const ext = extname(name)
-  const base = basename(name, ext)
-  let i = 2
-  while (existing.has(`${base}-${i}${ext}`)) i++
-  return `${base}-${i}${ext}`
 }
 
 // ── Transform a single .md file ─────────────────────────────────────────────
@@ -171,16 +169,17 @@ async function transformMarkdownFile(
   author?: string,
 ): Promise<void> {
   const raw = await readFile(srcPath, 'utf-8')
+  if (!/^---(?:ya?ml)?[ \t]*\r?\n/.test(raw)) throw new Error('Only YAML frontmatter is allowed')
   const { data, content } = matter(raw)
 
   const updatedFm = fmBuilder(data, content, author)
-  const updatedBody = rewriteImagePaths(content)
+  const updatedBody = rewriteImagePaths(content).replace(/</g, '&lt;').replace(/\{/g, '&#123;')
 
   // Stringify back with gray-matter
   const output = matter.stringify(updatedBody, updatedFm)
 
   await mkdir(dirname(destPath), { recursive: true })
-  await writeFile(destPath, output, 'utf-8')
+  await safeWriteFile(dirname(destPath), basename(destPath), output)
 }
 
 // ── Walk a type directory (posts/ or pages/) ────────────────────────────────
@@ -201,11 +200,12 @@ async function walkTypeDir(
   if (!existsSync(typeDir)) return { transformed, imagesCopied, imageFailed }
 
   const slugDirs = await readdir(typeDir, { withFileTypes: true })
+  assertUniqueSegments(slugDirs.map(e => e.name))
 
   for (const entry of slugDirs) {
     if (!entry.isDirectory()) continue
 
-    const slug = entry.name
+    const slug = safeSegment(entry.name)
     const srcSlugDir = join(typeDir, slug)
 
     // Find the .md file (usually index.md or slug.md)
@@ -233,6 +233,8 @@ async function walkTypeDir(
 
 export async function transformWp2mdOutput(options: TransformOptions): Promise<TransformResult> {
   const { wp2mdDir, outputDir, categoryNames, authorsBySlug } = options
+  await assertSafeTree(wp2mdDir)
+  await assertSafeTree(outputDir)
 
   const articlesDir = join(outputDir, 'src', 'content', 'articles')
   const pagesDir = join(outputDir, 'src', 'content', 'pages')
