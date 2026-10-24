@@ -110,6 +110,8 @@ export interface WPSiteInfo {
 
 /** Local, versioned source inventory. Content can contain private source data. */
 export interface SourceItem {
+  /** Names only, including private schema/oEmbed keys; no new raw values. */
+  metadataKeys?: string[]
   key: string
   id: number
   type: string
@@ -128,6 +130,9 @@ export interface SourceManifest {
   sourceSha256: string
   items: SourceItem[]
   media: WPMedia[]
+  /** Validated in-tree configuration; absent means the empty configuration. */
+  staticPlugins?: unknown
+  pluginFailure?: PluginFailureCode
 }
 export interface ReportLayout {
   contentDir: string
@@ -164,4 +169,35 @@ export interface MigrationReportV1 {
   qualityPassed: boolean
   /** SHA-256 snapshots of report-relevant supporting files. */
   artifacts?: Record<string, string>
+  compatibility: StaticPluginCompatibility
+}
+
+export interface StaticPluginConfig {
+  api: 'depress.static-plugin/v1'
+  plugins: Array<{ id: string; version: string; options: Record<string, never> }>
+}
+export type PluginFailureCode = 'PLUGIN_CONFIG_INVALID' | 'PLUGIN_EXECUTION_FAILED' | 'PLUGIN_OUTPUT_REJECTED' | 'PLUGIN_BUDGET_EXCEEDED'
+export interface PluginDiagnostic {
+  code: string
+  severity: 'info' | 'warning' | 'error'
+  classification: 'static-replacement' | 'manual-review' | 'unsupported-dynamic'
+  sourceId?: number
+  tokenId?: string
+  pluginId?: string
+  message: string
+  action: string
+}
+export interface StaticPluginCompatibility {
+  api: 'depress.static-plugin/v1'
+  matrixVersion: 1
+  plugins: Array<{ id: string; version: string }>
+  coverage: { wxr: 'scanned'; pluginTables: 'not-assessed'; phpRuntime: 'not-assessed'; omittedExports: 'not-assessed' }
+  diagnostics: PluginDiagnostic[]
+  sourceFeatures: Array<{ sourceId: number; kind: 'metadata' | 'comment' | 'block'; reference: string; start?: number; end?: number }>
+  occurrences: Array<{
+    sourceId: number; tokenId: string; tag: string; start: number; end: number
+    pluginId?: string
+    classification: 'static-replacement' | 'manual-review' | 'unsupported-dynamic'
+    outcome: 'observed' | 'verified' | 'not-preserved'
+  }>
 }

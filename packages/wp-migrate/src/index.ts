@@ -1,5 +1,8 @@
 export { safeSegment, assertUniqueSegments, assertSafeTree, safeWriteFile, containedPath } from './input-boundary.js'
 export { convertSafeExport, validateExportPaths } from './safe-convert.js'
+export { validateStaticPluginConfig } from './static-plugins.js'
+export { StaticPluginError } from './static-plugin-host.js'
+export type { StaticPluginConfig, StaticPluginCompatibility, PluginDiagnostic } from '@depress-org/core'
 // WordPress Migration Engine
 export { parseWPExport } from './parser.js'
 export { readWPDatabase } from './db-reader.js'

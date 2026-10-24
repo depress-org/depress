@@ -86,7 +86,17 @@ try {
     writeFileSync(join(consumer, 'bad.xml'), '<rss><channel>broken')
     const uploads = join(consumer, 'wordpress/wp-content/uploads/2026/10')
     mkdirSync(uploads, { recursive: true }); copyFileSync(join(consumer, 'photo.png'), join(uploads, 'photo.png'))
-    mustRun('default-migrate', bin, ['migrate', '--input', 'offline.xml', '--output', 'default-site'], consumer)
+    // #30: a completed migration with canonical needs-review now exits 1.
+    // Do not equate a known default-theme quality NO-GO with missing assets,
+    // and do not rewrite the report/CLI to make packaging falsely green.
+    const defaultMigration = run('default-migrate', bin, ['migrate', '--input', 'offline.xml', '--output', 'default-site'], consumer)
+    const defaultReport = JSON.parse(readFileSync(join(consumer, 'default-site/migration-report.json'), 'utf8'))
+    assert.equal(defaultReport.schemaVersion, 1)
+    assert.equal(typeof defaultReport.qualityPassed, 'boolean')
+    assert(Array.isArray(defaultReport.items) && defaultReport.items.length > 0, 'Default migration must retain per-item evidence')
+    assert.equal(defaultMigration.status, defaultReport.qualityPassed ? 0 : 1, 'CLI exit must match canonical quality')
+    mustRun('default-report-replay', process.execPath, ['probe.mjs', '--assert-default-report'], consumer)
+    report.defaultMigration = { exit: defaultMigration.status, qualityPassed: defaultReport.qualityPassed }
     mustRun('scaffold-migrate', bin, ['migrate', '--input', 'offline.xml', '--theme', 'scaffold', '--output', 'scaffold-site'], consumer)
     mustRun('media-migrate', bin, ['migrate', '--input', 'media.xml', '--db', 'database.sql', '--wp-dir', 'wordpress', '--theme', 'scaffold', '--output', 'cli-media'], consumer)
     mustRun('library-parity-isolation-media', process.execPath, ['probe.mjs'], consumer)
