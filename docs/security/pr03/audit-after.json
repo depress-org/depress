@@ -1,0 +1,1232 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@astrojs/cloudflare": {
+      "name": "@astrojs/cloudflare",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1117135,
+          "name": "@astrojs/cloudflare",
+          "dependency": "@astrojs/cloudflare",
+          "title": "Cloudflare has SSRF via redirect following through its image-binding-transform endpoint (incomplete fix for GHSA-qpr4)",
+          "url": "https://github.com/advisories/GHSA-88gm-j2wx-58h6",
+          "severity": "low",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 2.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<13.1.10"
+        },
+        "astro",
+        "esbuild",
+        "miniflare",
+        "wrangler"
+      ],
+      "effects": [],
+      "range": "<=13.1.9",
+      "nodes": [
+        "node_modules/@astrojs/cloudflare"
+      ],
+      "fixAvailable": {
+        "name": "@astrojs/cloudflare",
+        "version": "14.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "@astrojs/markdoc": {
+      "name": "@astrojs/markdoc",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "astro",
+        "esbuild"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-vercel-split-20230629135007 || 0.0.5 - 0.12.9 || 1.0.0-alpha.0 - 1.0.0-beta.15",
+      "nodes": [
+        "node_modules/@astrojs/markdoc"
+      ],
+      "fixAvailable": {
+        "name": "@astrojs/markdoc",
+        "version": "2.1.1",
+        "isSemVerMajor": true
+      }
+    },
+    "@astrojs/tailwind": {
+      "name": "@astrojs/tailwind",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "tailwindcss"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@astrojs/tailwind"
+      ],
+      "fixAvailable": false
+    },
+    "@fastify/busboy": {
+      "name": "@fastify/busboy",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1240982,
+          "name": "@fastify/busboy",
+          "dependency": "@fastify/busboy",
+          "title": "@fastify/busboy vulnerable to Denial of Service via prototype-named multipart part header",
+          "url": "https://github.com/advisories/GHSA-x8mw-p69m-v3mx",
+          "severity": "high",
+          "cwe": [
+            "CWE-754"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=1.0.0 <3.2.1"
+        },
+        {
+          "source": 1241276,
+          "name": "@fastify/busboy",
+          "dependency": "@fastify/busboy",
+          "title": "@fastify/busboy vulnerable to CRLF injection via multipart Content-Disposition filename and name",
+          "url": "https://github.com/advisories/GHSA-gxm5-99cw-xjw9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 5.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:N/I:L/A:N"
+          },
+          "range": "<3.2.2"
+        }
+      ],
+      "effects": [
+        "undici"
+      ],
+      "range": "<=3.2.1",
+      "nodes": [
+        "node_modules/@fastify/busboy"
+      ],
+      "fixAvailable": {
+        "name": "@astrojs/cloudflare",
+        "version": "14.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "astro": {
+      "name": "astro",
+      "severity": "critical",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1108906,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro's `X-Forwarded-Host` is reflected without validation",
+          "url": "https://github.com/advisories/GHSA-5ff5-9fcw-vg88",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-20",
+            "CWE-470"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": "<5.14.3"
+        },
+        {
+          "source": 1109738,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro vulnerable to URL manipulation via headers, leading to middleware and CVE-2025-61925 bypass",
+          "url": "https://github.com/advisories/GHSA-hr2q-hp5q-x767",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": ">=2.16.0 <5.15.5"
+        },
+        {
+          "source": 1109850,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro vulnerable to reflected XSS via the server islands feature",
+          "url": "https://github.com/advisories/GHSA-wrwg-2hg8-v723",
+          "severity": "high",
+          "cwe": [
+            "CWE-79",
+            "CWE-80"
+          ],
+          "cvss": {
+            "score": 7.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:H/A:N"
+          },
+          "range": "<=5.15.6"
+        },
+        {
+          "source": 1109851,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro Development Server has Arbitrary Local File Read",
+          "url": "https://github.com/advisories/GHSA-x3h8-62x9-952g",
+          "severity": "low",
+          "cwe": [
+            "CWE-22",
+            "CWE-23"
+          ],
+          "cvss": {
+            "score": 3.5,
+            "vectorString": "CVSS:3.1/AV:A/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N"
+          },
+          "range": "<5.14.3"
+        },
+        {
+          "source": 1111026,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro Cloudflare adapter has Stored Cross-site Scripting vulnerability in /_image endpoint",
+          "url": "https://github.com/advisories/GHSA-fvmw-cj7j-j39q",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 5.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N"
+          },
+          "range": "<5.15.9"
+        },
+        {
+          "source": 1111027,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro's middleware authentication checks based on url.pathname can be bypassed via url encoded values",
+          "url": "https://github.com/advisories/GHSA-ggxq-hp9w-j794",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<5.15.8"
+        },
+        {
+          "source": 1111294,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro has an Authentication Bypass via Double URL Encoding, a bypass for CVE-2025-64765",
+          "url": "https://github.com/advisories/GHSA-whqg-ppgf-wp8c",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-647"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+          },
+          "range": "<5.15.8"
+        },
+        {
+          "source": 1115427,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Remote allowlist bypass via unanchored matchPathname wildcard",
+          "url": "https://github.com/advisories/GHSA-g735-7g2w-hh3f",
+          "severity": "low",
+          "cwe": [
+            "CWE-20",
+            "CWE-183"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+          },
+          "range": ">=2.10.10 <5.18.1"
+        },
+        {
+          "source": 1117141,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: XSS in define:vars via incomplete </script> tag sanitization",
+          "url": "https://github.com/advisories/GHSA-j687-52p2-xcff",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": "<6.1.6"
+        },
+        {
+          "source": 1118920,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Server island encrypted parameters vulnerable to cross-component replay",
+          "url": "https://github.com/advisories/GHSA-xr5h-phrj-8vxv",
+          "severity": "low",
+          "cwe": [
+            "CWE-79",
+            "CWE-323"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": "<6.1.10"
+        },
+        {
+          "source": 1123700,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: XSS via Unescaped Attribute Names in Spread Props",
+          "url": "https://github.com/advisories/GHSA-jrpj-wcv7-9fh9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 4.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N"
+          },
+          "range": "<6.4.6"
+        },
+        {
+          "source": 1139373,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: XSS via unescaped spread attribute names in renderHTMLElement (incomplete fix for CVE-2026-54298)",
+          "url": "https://github.com/advisories/GHSA-f48w-9m4c-m7f5",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<7.0.6"
+        },
+        {
+          "source": 1139375,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Cross-site scripting via unescaped transition:* directive values on hydrated islands",
+          "url": "https://github.com/advisories/GHSA-7pw4-f3q4-r2p2",
+          "severity": "low",
+          "cwe": [
+            "CWE-79",
+            "CWE-83",
+            "CWE-116"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=3.10.0 <7.0.4"
+        },
+        {
+          "source": 1139376,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Reflected XSS via unescaped View Transition animation properties",
+          "url": "https://github.com/advisories/GHSA-4g3v-8h47-v7g6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=2.9.0 <=7.0.9"
+        },
+        {
+          "source": 1139377,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Host header SSRF in prerendered error page fetch",
+          "url": "https://github.com/advisories/GHSA-2pvr-wf23-7pc7",
+          "severity": "high",
+          "cwe": [
+            "CWE-20",
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:L/A:N"
+          },
+          "range": "<6.4.6"
+        },
+        {
+          "source": 1139378,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Reflected XSS via unescaped slot name",
+          "url": "https://github.com/advisories/GHSA-8hv8-536x-4wqp",
+          "severity": "high",
+          "cwe": [
+            "CWE-79",
+            "CWE-80"
+          ],
+          "cvss": {
+            "score": 7.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:H/A:N"
+          },
+          "range": "<6.3.3"
+        },
+        {
+          "source": 1193723,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Remote code execution through AVIF image optimization",
+          "url": "https://github.com/advisories/GHSA-26w7-cxv4-gfx2",
+          "severity": "critical",
+          "cwe": [
+            "CWE-125",
+            "CWE-787"
+          ],
+          "cvss": {
+            "score": 9.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "range": "<7.2.8"
+        },
+        {
+          "source": 1193724,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Authorization bypass from missing path-segment boundary check when stripping the configured base",
+          "url": "https://github.com/advisories/GHSA-376h-93r7-7g6f",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-187"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=7.2.3"
+        },
+        {
+          "source": 1242877,
+          "name": "astro",
+          "dependency": "astro",
+          "title": "Astro: Reflected/Stored XSS via unescaped <script>/<style> tag content in JSX/MDX rendering",
+          "url": "https://github.com/advisories/GHSA-98hj-9722-w3j8",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:N"
+          },
+          "range": "<7.3.2"
+        },
+        "esbuild",
+        "sharp",
+        "vite",
+        "zod",
+        "zod-to-ts"
+      ],
+      "effects": [
+        "@astrojs/cloudflare",
+        "@astrojs/markdoc"
+      ],
+      "range": "<=7.3.1",
+      "nodes": [
+        "node_modules/astro"
+      ],
+      "fixAvailable": {
+        "name": "astro",
+        "version": "7.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "esbuild": {
+      "name": "esbuild",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1102341,
+          "name": "esbuild",
+          "dependency": "esbuild",
+          "title": "esbuild enables any website to send any requests to the development server and read the response",
+          "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-346"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+          },
+          "range": "<=0.24.2"
+        }
+      ],
+      "effects": [
+        "@astrojs/cloudflare",
+        "@astrojs/markdoc",
+        "astro",
+        "vite",
+        "wrangler"
+      ],
+      "range": "<=0.24.2",
+      "nodes": [
+        "node_modules/@astrojs/markdoc/node_modules/esbuild",
+        "node_modules/astro/node_modules/esbuild",
+        "node_modules/esbuild",
+        "node_modules/vite/node_modules/esbuild",
+        "node_modules/wrangler/node_modules/esbuild"
+      ],
+      "fixAvailable": {
+        "name": "@astrojs/cloudflare",
+        "version": "14.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "fast-xml-parser": {
+      "name": "fast-xml-parser",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1117911,
+          "name": "fast-xml-parser",
+          "dependency": "fast-xml-parser",
+          "title": "fast-xml-parser XMLBuilder: XML Comment and CDATA Injection via Unescaped Delimiters",
+          "url": "https://github.com/advisories/GHSA-gh4j-gqv2-49f6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-91"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": "<5.7.0"
+        }
+      ],
+      "effects": [],
+      "range": "<5.7.0",
+      "nodes": [
+        "node_modules/fast-xml-parser"
+      ],
+      "fixAvailable": {
+        "name": "fast-xml-parser",
+        "version": "5.11.2",
+        "isSemVerMajor": true
+      }
+    },
+    "miniflare": {
+      "name": "miniflare",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "undici",
+        "ws",
+        "zod"
+      ],
+      "effects": [
+        "@astrojs/cloudflare",
+        "wrangler"
+      ],
+      "range": "<=0.0.0-fff677e35 || 0.20230628.0 - 0.20230908.0 || 2.0.0-next.1 - 4.20260518.0",
+      "nodes": [
+        "node_modules/miniflare"
+      ],
+      "fixAvailable": {
+        "name": "@astrojs/cloudflare",
+        "version": "14.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "postcss-nested": {
+      "name": "postcss-nested",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss-selector-parser"
+      ],
+      "effects": [
+        "tailwindcss"
+      ],
+      "range": "2.0.3 - 6.2.0",
+      "nodes": [
+        "node_modules/postcss-nested"
+      ],
+      "fixAvailable": false
+    },
+    "postcss-selector-parser": {
+      "name": "postcss-selector-parser",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1241232,
+          "name": "postcss-selector-parser",
+          "dependency": "postcss-selector-parser",
+          "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
+          "url": "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<7.1.6"
+        }
+      ],
+      "effects": [
+        "postcss-nested",
+        "tailwindcss"
+      ],
+      "range": "<7.1.6",
+      "nodes": [
+        "node_modules/postcss-selector-parser"
+      ],
+      "fixAvailable": false
+    },
+    "sharp": {
+      "name": "sharp",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1124066,
+          "name": "sharp",
+          "dependency": "sharp",
+          "title": "sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591",
+          "url": "https://github.com/advisories/GHSA-f88m-g3jw-g9cj",
+          "severity": "high",
+          "cwe": [
+            "CWE-1395"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.35.0"
+        },
+        {
+          "source": 1193725,
+          "name": "sharp",
+          "dependency": "sharp",
+          "title": "sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545",
+          "url": "https://github.com/advisories/GHSA-rgj7-g3m4-5g8c",
+          "severity": "high",
+          "cwe": [
+            "CWE-122"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.35.4"
+        },
+        {
+          "source": 1241331,
+          "name": "sharp",
+          "dependency": "sharp",
+          "title": "sharp : Vulnerability in librsvg dependency CVE-2026-96889",
+          "url": "https://github.com/advisories/GHSA-wq5f-xc86-pv6w",
+          "severity": "high",
+          "cwe": [
+            "CWE-416",
+            "CWE-1395"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.35.5"
+        }
+      ],
+      "effects": [
+        "astro",
+        "wrangler"
+      ],
+      "range": "<=0.35.5-rc.1",
+      "nodes": [
+        "node_modules/sharp"
+      ],
+      "fixAvailable": {
+        "name": "sharp",
+        "version": "0.35.5",
+        "isSemVerMajor": true
+      }
+    },
+    "tailwindcss": {
+      "name": "tailwindcss",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "postcss-nested",
+        "postcss-selector-parser"
+      ],
+      "effects": [
+        "@astrojs/tailwind"
+      ],
+      "range": "<=0.0.0-oxide-insiders.ff2c25f || 0.5.0 - 3.4.19",
+      "nodes": [
+        "node_modules/tailwindcss"
+      ],
+      "fixAvailable": false
+    },
+    "undici": {
+      "name": "undici",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@fastify/busboy",
+        {
+          "source": 1112496,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has an unbounded decompression chain in HTTP responses on Node.js Fetch API via Content-Encoding leads to resource exhaustion",
+          "url": "https://github.com/advisories/GHSA-g9mf-h72j-4rw9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<6.23.0"
+        },
+        {
+          "source": 1114594,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has an HTTP Request/Response Smuggling issue",
+          "url": "https://github.com/advisories/GHSA-2mjp-6q6p-2qxm",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-444"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": "<6.24.0"
+        },
+        {
+          "source": 1114638,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has Unbounded Memory Consumption in WebSocket permessage-deflate Decompression",
+          "url": "https://github.com/advisories/GHSA-vrm6-8vpv-qv8q",
+          "severity": "high",
+          "cwe": [
+            "CWE-409"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<6.24.0"
+        },
+        {
+          "source": 1114640,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has Unhandled Exception in WebSocket Client Due to Invalid server_max_window_bits Validation",
+          "url": "https://github.com/advisories/GHSA-v9p9-hfj2-hcw8",
+          "severity": "high",
+          "cwe": [
+            "CWE-248"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<6.24.0"
+        },
+        {
+          "source": 1114642,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "Undici has CRLF Injection in undici via `upgrade` option",
+          "url": "https://github.com/advisories/GHSA-4992-7rv2-5pvq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 4.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:L/I:L/A:N"
+          },
+          "range": "<6.24.0"
+        },
+        {
+          "source": 1121242,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici vulnerable to HTTP header injection via Set-Cookie percent-decoding",
+          "url": "https://github.com/advisories/GHSA-p88m-4jfj-68fv",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:N"
+          },
+          "range": "<6.27.0"
+        },
+        {
+          "source": 1121245,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici WebSocket client vulnerable to denial of service via fragment count bypass",
+          "url": "https://github.com/advisories/GHSA-vxpw-j846-p89q",
+          "severity": "high",
+          "cwe": [
+            "CWE-400",
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<6.27.0"
+        },
+        {
+          "source": 1121255,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici vulnerable to Set-Cookie SameSite attribute downgrade via permissive substring matching",
+          "url": "https://github.com/advisories/GHSA-g8m3-5g58-fq7m",
+          "severity": "low",
+          "cwe": [
+            "CWE-183"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": "<6.27.0"
+        },
+        {
+          "source": 1130716,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici vulnerable to downstream response desynchronization via retry interceptor",
+          "url": "https://github.com/advisories/GHSA-8xcm-r25x-g524",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-444"
+          ],
+          "cvss": {
+            "score": 4.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+          },
+          "range": "<6.28.0"
+        },
+        {
+          "source": 1130727,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici vulnerable to CRLF Injection via blob-like body 'type' property",
+          "url": "https://github.com/advisories/GHSA-m8rv-5g2x-5cg5",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-93"
+          ],
+          "cvss": {
+            "score": 4.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N"
+          },
+          "range": "<6.28.0"
+        },
+        {
+          "source": 1130732,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields",
+          "url": "https://github.com/advisories/GHSA-v3r7-h72x-cjcm",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-74"
+          ],
+          "cvss": {
+            "score": 4.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+          },
+          "range": "<6.28.0"
+        },
+        {
+          "source": 1137243,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici vulnerable to HTTP response queue poisoning via keep-alive socket reuse",
+          "url": "https://github.com/advisories/GHSA-35p6-xmwp-9g52",
+          "severity": "low",
+          "cwe": [
+            "CWE-367"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": "<6.27.0"
+        },
+        {
+          "source": 1240039,
+          "name": "undici",
+          "dependency": "undici",
+          "title": "undici vulnerable to downstream response splitting via retry interceptor",
+          "url": "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+          "severity": "low",
+          "cwe": [
+            "CWE-444"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": "<6.28.1"
+        }
+      ],
+      "effects": [
+        "miniflare"
+      ],
+      "range": "<=6.28.0",
+      "nodes": [
+        "node_modules/undici"
+      ],
+      "fixAvailable": {
+        "name": "@astrojs/cloudflare",
+        "version": "14.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "vite": {
+      "name": "vite",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1116229,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+          "url": "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22",
+            "CWE-200"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.1"
+        },
+        {
+          "source": 1120784,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+          "url": "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-73",
+            "CWE-522"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.2"
+        },
+        {
+          "source": 1123525,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+          "url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
+          "severity": "high",
+          "cwe": [
+            "CWE-22",
+            "CWE-200"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": "<=6.4.2"
+        },
+        {
+          "source": 1242622,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: escapeCmdArgs() omits % escaping on Windows",
+          "url": "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-78"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242651,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors",
+          "url": "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-88"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242658,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: `fs.existsSync()` existence check can be bypassed on Windows",
+          "url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+          "severity": "high",
+          "cwe": [
+            "CWE-77"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242724,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "Vite: Cross origin script execution through Vite custom middleware",
+          "url": "https://github.com/advisories/GHSA-9jrq-w75r-8gcw",
+          "severity": "low",
+          "cwe": [
+            "CWE-80"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242730,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine",
+          "url": "https://github.com/advisories/GHSA-rq7h-c2jc-7f22",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22",
+            "CWE-284"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        "esbuild"
+      ],
+      "effects": [
+        "astro"
+      ],
+      "range": "<=6.4.3",
+      "nodes": [
+        "node_modules/vite"
+      ],
+      "fixAvailable": {
+        "name": "astro",
+        "version": "7.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "wrangler": {
+      "name": "wrangler",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "esbuild",
+        "miniflare",
+        "sharp"
+      ],
+      "effects": [
+        "@astrojs/cloudflare"
+      ],
+      "range": "<=4.60.0",
+      "nodes": [
+        "node_modules/wrangler"
+      ],
+      "fixAvailable": {
+        "name": "wrangler",
+        "version": "4.152.0",
+        "isSemVerMajor": true
+      }
+    },
+    "ws": {
+      "name": "ws",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119108,
+          "name": "ws",
+          "dependency": "ws",
+          "title": "ws: Uninitialized memory disclosure",
+          "url": "https://github.com/advisories/GHSA-58qx-3vcg-4xpx",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-908"
+          ],
+          "cvss": {
+            "score": 4.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=8.0.0 <8.20.1"
+        },
+        {
+          "source": 1123259,
+          "name": "ws",
+          "dependency": "ws",
+          "title": "ws: Memory exhaustion DoS from tiny fragments and data chunks",
+          "url": "https://github.com/advisories/GHSA-96hv-2xvq-fx4p",
+          "severity": "high",
+          "cwe": [
+            "CWE-400",
+            "CWE-770",
+            "CWE-1050"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=8.0.0 <8.21.0"
+        }
+      ],
+      "effects": [
+        "miniflare"
+      ],
+      "range": "8.0.0 - 8.20.1",
+      "nodes": [
+        "node_modules/ws"
+      ],
+      "fixAvailable": {
+        "name": "@astrojs/cloudflare",
+        "version": "14.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "zod": {
+      "name": "zod",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243066,
+          "name": "zod",
+          "dependency": "zod",
+          "title": "Zod can exhaust memory while validating oversized constrained collections",
+          "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<4.6.6"
+        }
+      ],
+      "effects": [
+        "astro",
+        "miniflare",
+        "zod-to-ts"
+      ],
+      "range": "<4.6.6",
+      "nodes": [
+        "node_modules/astro/node_modules/zod",
+        "node_modules/miniflare/node_modules/zod",
+        "node_modules/zod"
+      ],
+      "fixAvailable": {
+        "name": "astro",
+        "version": "7.4.2",
+        "isSemVerMajor": true
+      }
+    },
+    "zod-to-ts": {
+      "name": "zod-to-ts",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "zod"
+      ],
+      "effects": [
+        "astro"
+      ],
+      "range": "<=1.2.0",
+      "nodes": [
+        "node_modules/astro/node_modules/zod-to-ts"
+      ],
+      "fixAvailable": {
+        "name": "astro",
+        "version": "7.4.2",
+        "isSemVerMajor": true
+      }
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 7,
+      "high": 10,
+      "critical": 1,
+      "total": 18
+    },
+    "dependencies": {
+      "prod": 828,
+      "dev": 98,
+      "optional": 220,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 1093
+    }
+  }
+}
