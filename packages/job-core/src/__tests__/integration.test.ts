@@ -4,7 +4,7 @@ import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runJob, cleanupJob } from '../pipeline.js'
 import { InMemoryJobStore } from '../types.js'
-const store = new InMemoryJobStore()
+const store = new InMemoryJobStore().forOwner('test-owner')
 const roots: string[] = []
 afterEach(async () => {
   for (const job of await store.list()) await cleanupJob(job)

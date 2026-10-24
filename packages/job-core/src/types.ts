@@ -30,7 +30,8 @@ export interface JobInput {
 }
 
 export interface Job {
-  id: string
+  readonly id: string
+  readonly ownerId: string
   status: JobStatus
   input: JobInput
   createdAt: number
@@ -44,10 +45,14 @@ export interface Job {
   error?: string
 }
 
+export type JobPatch = Partial<Pick<Job, 'status' | 'outputDir' | 'deployUrl' | 'repoPath' | 'error'>>
+
+/** A tenant capability, acquired only after server-side authentication. */
 export interface JobStore {
+  readonly ownerId: string
   create(input: JobInput): Promise<Job>
   get(id: string): Promise<Job | undefined>
-  update(id: string, patch: Partial<Job>): Promise<Job>
+  update(id: string, patch: JobPatch): Promise<Job>
   list(): Promise<Job[]>
 }
 
@@ -57,30 +62,45 @@ function nextId(): string {
   return `job_${Date.now().toString(36)}_${counter}`
 }
 
-/** In-memory JobStore. Good enough for local/staging; not for multi-process prod. */
-export class InMemoryJobStore implements JobStore {
-  private jobs = new Map<string, Job>()
+/** Single-process scaffold repository. Never expose the root to request handlers. */
+export class InMemoryJobStore {
+  #jobs = new Map<string, Job>()
+  #scopes = new Map<string, JobStore>()
 
-  async create(input: JobInput): Promise<Job> {
-    const now = Date.now()
-    const job: Job = { id: nextId(), status: 'queued', input, createdAt: now, updatedAt: now }
-    this.jobs.set(job.id, job)
-    return job
-  }
-
-  async get(id: string): Promise<Job | undefined> {
-    return this.jobs.get(id)
-  }
-
-  async update(id: string, patch: Partial<Job>): Promise<Job> {
-    const existing = this.jobs.get(id)
-    if (!existing) throw new Error(`Job not found: ${id}`)
-    const updated: Job = { ...existing, ...patch, updatedAt: Date.now() }
-    this.jobs.set(id, updated)
-    return updated
-  }
-
-  async list(): Promise<Job[]> {
-    return Array.from(this.jobs.values())
+  forOwner(ownerId: string): JobStore {
+    if (typeof ownerId !== 'string' || !ownerId.trim() || ownerId.length > 128)
+      throw new Error('Invalid owner')
+    const cached = this.#scopes.get(ownerId)
+    if (cached) return cached
+    const find = (id: string) => {
+      const job = this.#jobs.get(id)
+      return job?.ownerId === ownerId ? job : undefined
+    }
+    const scope: JobStore = Object.freeze({
+      ownerId,
+      create: async (input: JobInput) => {
+        const now = Date.now()
+        const job: Job = { id: nextId(), ownerId, status: 'queued', input: structuredClone(input), createdAt: now, updatedAt: now }
+        this.#jobs.set(job.id, job)
+        return structuredClone(job)
+      },
+      get: async (id: string) => {
+        const job = find(id)
+        return job ? structuredClone(job) : undefined
+      },
+      update: async (id: string, patch: JobPatch) => {
+        const existing = find(id)
+        if (!existing) throw new Error(`Job not found: ${id}`)
+        const allowed = ['status', 'outputDir', 'deployUrl', 'repoPath', 'error']
+        if (Object.keys(patch).some((key) => !allowed.includes(key)))
+          throw new Error('Immutable job field')
+        const updated: Job = { ...existing, ...structuredClone(patch), updatedAt: Date.now() }
+        this.#jobs.set(id, updated)
+        return structuredClone(updated)
+      },
+      list: async () => structuredClone([...this.#jobs.values()].filter((job) => job.ownerId === ownerId)),
+    })
+    this.#scopes.set(ownerId, scope)
+    return scope
   }
 }
