@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFile, realpath } from 'node:fs/promises'
+import { readFile, readdir, realpath } from 'node:fs/promises'
 import { containedPath, safeWriteFile } from './input-boundary.js'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
@@ -168,6 +168,34 @@ function images(value: string, fileExt: string): ImageEvidence[] {
   } catch { return [] }
 }
 
+/** Inventory physical documents, not reader IDs/frontmatter or source-derived guesses.
+ * Unknown public copies fail closed; any nested editor tree requires reader proof.
+ */
+async function privacyInventory(root: string, layout: ReportLayout, eligible: SourceItem[]) {
+  const expected = new Set(eligible.map(item => { try { return expectedPath(item, layout) } catch { return '' } }))
+  const editors: string[] = [], unknown: string[] = []
+  const walk = async (path: string, content: boolean): Promise<void> => {
+    let entries
+    try { entries = await readdir(await safePath(root, path), { withFileTypes: true }) }
+    catch (error: any) { if (['ENOENT', 'ENOTDIR'].includes(error.code)) return; throw error }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+      const child = `${path}/${entry.name}`
+      // Do not follow aliases/cycles or silently skip unreadable/escaped trees.
+      if (entry.isSymbolicLink()) throw new UnsafePath('Unproven content/public symlink')
+      if (entry.isDirectory()) await walk(child, content)
+      else if (entry.isFile() && /\.(?:mdoc|md|mdx|html?)$/i.test(entry.name)) {
+        if (content && child.split('/').includes('_drafts')) editors.push(child)
+        else if (!expected.has(child)) unknown.push(child)
+      }
+    }
+  }
+  // Canonical active reader roots exist independently of optional/redirected
+  // report layout claims. Never let omission of pagesDir hide a live collection.
+  for (const dir of new Set(['src/content/articles', 'src/content/pages', layout.contentDir, layout.pagesDir].filter((p): p is string => !!p))) await walk(dir, true)
+  await walk('public', false)
+  return { editors, unknown }
+}
+
 /** Inspect actual bytes, not transform counters. No source content is executed. */
 export async function inspectMigration(outputDir: string, manifest: SourceManifest, layout: ReportLayout): Promise<MigrationReportV1> {
   const ids = count(manifest.items, i => String(i.id))
@@ -206,11 +234,6 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
         catch (error: any) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error }
         if (editor) {
           item.outputPath = editorPath; item.contentSha256 = sha(editor)
-          try {
-            if (source.type !== 'post' || layout.contentDir !== 'src/content/articles' || layout.fileExt !== 'mdoc' || !layout.useDirectoryEntries) throw new Error('Unknown draft storage')
-            const proof = await proveScaffoldDraftExclusion(p => readSafe(outputDir, p), p => p ? safePath(outputDir, p) : realpath(outputDir))
-            for (const [file, bytes] of Object.entries(proof)) artifacts[file] = sha(bytes)
-          } catch { finding(item.findings, 'unproven-draft-exclusion', 'Editor storage is not byte-proven excluded by canonical public routes and listings') }
         }
       } catch { finding(item.findings, 'unsafe-path', 'Cannot safely prove nonpublished output exclusion') }
       if (item.findings.length) item.status = 'failed'
@@ -264,6 +287,27 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
     }
     item.status = item.findings.length ? 'failed' : 'migrated'
   }
+  // Schema v1 has per-source findings only. Inventory failures conservatively
+  // taint every nonpublic document, or the first source when none is inventoried;
+  // never invent an association from title/body/slug or bless unknown content.
+  const privacyItems = items.filter(i => i.sourceStatus !== 'publish' && ['post', 'page'].includes(i.type))
+  const privacyFinding = (code: string, detail: string) => {
+    for (const item of privacyItems.length ? privacyItems : items.slice(0, 1)) {
+      finding(item.findings, code, detail); item.status = 'failed'
+    }
+  }
+  try {
+    const inventory = await privacyInventory(outputDir, layout, eligible)
+    for (const path of inventory.unknown) privacyFinding('untracked-public-output', `Document has no published source output claim: ${path}`)
+    if (inventory.editors.length) {
+      try {
+        if (layout.contentDir !== 'src/content/articles' || (layout.pagesDir && layout.pagesDir !== 'src/content/pages') || layout.fileExt !== 'mdoc' || !layout.useDirectoryEntries) throw new Error('Unknown editor layout')
+        const proof = await proveScaffoldDraftExclusion(p => readSafe(outputDir, p), p => p ? safePath(outputDir, p) : realpath(outputDir))
+        for (const path of inventory.editors) artifacts[path] = sha(await readSafe(outputDir, path))
+        for (const [path, bytes] of Object.entries(proof)) artifacts[path] = sha(bytes)
+      } catch { privacyFinding('unproven-draft-exclusion', 'Physical editor documents are not byte-proven excluded by canonical public routes and listings') }
+    }
+  } catch { privacyFinding('unsafe-path', 'Cannot safely inventory physical content/public documents') }
   const names = count(manifest.media, m => basename(m.url).toLocaleLowerCase('en-US'))
   const media: MigrationMedia[] = []
   for (const source of manifest.media) {
