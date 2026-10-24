@@ -95,6 +95,10 @@ async function workspace(prefix: string) {
   return mkdtemp(join(root, prefix))
 }
 
+// A separate build budget: the actual Keystatic client bundle exceeds 512 MiB.
+// Not a total native-memory limit or an OS sandbox.
+const BUILD_HEAP_MB = 1024
+
 /** Creates/retains a lock then installs exactly it; install lifecycle scripts are disabled. */
 export async function buildSite(
   dir: string,
@@ -135,7 +139,7 @@ export async function buildSite(
       throw new ServiceError('INSTALL_FAILED', 'Dependency installation failed')
     const build = await spawnFn(trustedNpm, ['run', 'build'], {
       cwd: dir,
-      env,
+      env: { ...env, NODE_OPTIONS: `--max-old-space-size=${BUILD_HEAP_MB}` },
       timeoutMs: 300_000,
     })
     if (build.code !== 0)

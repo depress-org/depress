@@ -71,6 +71,9 @@ describe('typed deploy service', () => {
       '--legacy-peer-deps',
     ])
     expect(calls[2][1]).toEqual(['run', 'build'])
+    // Real cold Keystatic build exhausts 512 MiB; build-only policy stays bounded.
+    expect(calls[2][2].env.NODE_OPTIONS).toBe('--max-old-space-size=1024')
+    expect(calls[0][2].env.NODE_OPTIONS).toBe('--max-old-space-size=512')
     for (const call of calls.slice(0, 3)) {
       expect(call[2].env).not.toHaveProperty('CLOUDFLARE_API_TOKEN')
       expect(JSON.stringify(call)).not.toContain('secret-token')

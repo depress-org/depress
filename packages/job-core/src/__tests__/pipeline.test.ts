@@ -59,6 +59,21 @@ describe('shared job lifecycle #16', () => {
       expect(deploy).not.toHaveBeenCalled()
     },
   )
+  it('invalid mode fails before migration', async () => {
+    const job = await store.create({ ...input, mode: 'invalid' as any })
+    const result = await runJob(store, job.id)
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('INVALID_MODE')
+    expect(migrate).not.toHaveBeenCalled()
+  })
+  it('request target cannot override trusted server deployment configuration', async () => {
+    const job = await store.create({ ...input, mode: 'deploy', deployTarget: 'vercel' })
+    const result = await runJob(store, job.id, { deployment })
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('INVALID_TARGET')
+    expect(migrate).not.toHaveBeenCalled()
+    expect(deploy).not.toHaveBeenCalled()
+  })
   it('unknown theme fails before migration', async () => {
     const job = await store.create({ ...input, themeId: 'not-a-theme' })
     expect((await runJob(store, job.id)).status).toBe('failed')
