@@ -1,121 +1,95 @@
-# depress — Revenue & Go-to-Market Plan
+# depress — service-only revenue hypotheses
 
-## Who the buyer is
+**Status: unvalidated proposals, not an approved offer or paid-service readiness
+claim.** PR-06 / #37 replaces the earlier feature-gating/price-sheet framing.
+No customer interviews, willingness-to-pay data, sales, signed commitments or
+unit-economics measurements are supplied by this document.
 
-Large companies on WordPress are not individual developers. They are:
+## Accepted boundary: OSS stays free forever
 
-- **Publishers and media sites** — 50–500 pages, active editorial team, can't afford downtime
-- **SaaS marketing sites** — heavy WooCommerce or ACF usage, dev team wants off WP but migration risk blocks them
-- **Agencies** — migrate 5–30 client sites per year, currently bill $8k–$40k per project manually
-- **Enterprise brands** — running WordPress VIP ($25k+/yr) and looking to cut infra costs by moving to Jamstack
+Core, CLI and `wp-migrate`, including SQL import, media migration and all bundled
+or contributed theme adapters, remain free OSS. No single-site restriction,
+license server, paid feature flag, account, seat check or billing dependency may
+restrict local use. Optional operated services may charge for hosted compute,
+private artifact delivery, support or separately contracted human work — not
+for unlocking the migration engine.[1]
 
-What they share: the migration itself isn't the scary part — **losing Google rankings, breaking the editorial workflow, and retraining the content team** is what blocks them. Your product solves all three.
+Free availability is not a claim that every feature is production-ready. PR-05
+records bounded conversion evidence and explicit release/hosting blockers; it
+does not prove arbitrary WordPress fidelity, editor workflow preservation, SEO
+rankings, private delivery, durable isolated workers or actual deployment.[4]
 
----
+## Offer hypotheses — none approved or launched
 
-## Tiers
+| Working label | Optional service hypothesis | Still requires evidence/decision |
+|---|---|---|
+| Hosted migration (formerly Pro) | Operated migration/build capacity plus private artifact delivery; bounded per-owner successful-migration allowance | Measured cost per success/retry, supported inputs, isolation/delivery proof, demand and approved terms |
+| Agency service | Shared owner allowance and, if separately implemented, bounded seats for authenticated members; integration assistance | Real agency workflow evidence, membership authorization, finite capacity/seat policy and support cost |
+| Assisted/enterprise service | Explicitly scoped human migration/QA/customization engagements | Actual delivery capability, staffing/cost, legal scope, support terms and owner-approved quote |
 
-### Free (open source, stays open source)
-- Single site, CLI only
-- AstroWind and Rocket themes
-- Community support via GitHub Issues
-- **Purpose:** builds trust, drives word-of-mouth among developers, feeds the paid funnel
+All plan IDs, amounts, currencies, periods, finite quotas, concurrency limits,
+seat limits and grace durations must be versioned configuration reviewed before
+use. No price/limit is selected here. The historical $299, $149/mo, $990/yr,
+$4,000/yr and $3k–$15k figures were unsupported proposals, **not approved or
+available terms**; this revision does not preserve them as offers. The previous
+"unlimited migrations" claim is withdrawn: hosted admission must be finitely
+bounded, and over-limit requests never trigger an automatic overage charge.
+Fixture allowances in the [entitlement.v1 contract](docs/billing/entitlements-v1.md)
+are tiny synthetic test values, not commercial terms.
 
-### Pro — $299 one-time per migration
-Targets: solo developers, small agencies, startup marketing teams
+SQL/SEO metadata import, media conversion, white-label output/customization,
+CMS scaffolding and theme adapters are not paid engine unlocks. Existing
+third-party asset licenses remain their own constraints; this document creates
+no marketplace, resale rights, referral relationship or paid adapter tier.
+No guaranteed response time, managed-migration margin, SEO result, migration
+duration, downtime promise, revenue forecast or customer target is accepted as
+fact. Previous buyer-volume/project-price/infra-savings claims lacked supplied
+evidence and are withdrawn rather than silently reused.
 
-Unlocks:
-- Web UI (no CLI required — upload WXR + SQL, download zip)
-- DB import (SEO meta, featured images, author bios from `wp_postmeta`)
-- Full media download (re-fetches images from live WP site)
-- Priority email support (48h SLA)
-- All theme adapters including premium ones
+## Need → offer → smallest build → measure → decision
 
-### Agency — $149/mo or $990/yr
-Targets: digital agencies doing 5+ migrations per year
+1. **Need evidence (not collected here):** obtain owner authorization before
+   contacting real people; record dated attributable observations about migration
+   tasks, existing alternatives and paid operational pain. Do not invent quotes,
+   customers or willingness to pay.
+2. **Offer test (proposal only):** compare a bounded operated-service concept
+   against free self-hosted OSS. Record interest separately from purchases; no
+   public price/checkout or contractual promise without human approval.
+3. **Smallest technical prerequisite:** independently review the proposed
+   [entitlement contract and fake-event scenarios](docs/billing/entitlements-v1.md)
+   while preserving #23 server-derived owner capabilities. This is requirements
+   work, not payment implementation or a new account API.[1][2][5]
+4. **Build/deliver prerequisites:** #25 must prove durable reservation/queue
+   atomicity, worker fencing/isolation, private artifacts and cleanup. A model,
+   mocked URL or successful local conversion does not satisfy those gates.[3][4]
+5. **Measure before commercial decision (metric definitions, not results):**
+   count unique logical hosted jobs attempted/succeeded/failed/cancelled;
+   reservations/consumption/releases per owner-period; retry and duplicate-event
+   counts; actual compute/storage/support cost; private-delivery failure and
+   cleanup latency. Keep source contents, tokens and raw paths out of telemetry.
+   No benchmark, margin or target has been measured/approved here.
+6. **Iterate or kill:** present evidence, costs, readiness gaps and exact proposed
+   terms to the owner. A positive model review is not permission to spend,
+   publish, charge, contact prospects or deploy. Missing evidence stays missing.
 
-Everything in Pro, plus:
-- Unlimited migrations
-- White-label output (remove depress branding, inject agency footer)
-- Client handoff package (generated README, Keystatic CMS walkthrough PDF)
-- Webhook/API access for pipeline integration
-- Team seats (up to 5)
+## Delivery and approval status
 
-### Enterprise — starting $4,000/yr
-Targets: companies on WordPress VIP, large publishers, brands with 500+ pages
+`docs/billing/entitlements-v1.md` and its JSON fixtures define a **proposed**
+provider-neutral service contract. They do not run billing, sell seats, connect
+webhooks or establish durable persistence. Independent QA and later executable
+adapter tests are required. Provider selection/integration is deferred.
 
-Everything in Agency, plus:
-- Dedicated migration engineer (1 assisted migration per quarter included)
-- Custom theme adapter for the company's existing design system
-- SEO audit report pre/post migration (redirect map, canonical check)
-- SLA: 4h response, named Slack channel
-- On-prem/air-gapped deployment option
-- Annual contract with invoicing (not card)
+No Stripe SDK/account/key/webhook, checkout, charge, live bot/provider call,
+pricing rollout, resource provisioning or production deployment is authorized.
+Human approval is required for spending, real-person outreach, public offers
+under the owner's name, legal/pricing commitments and protected-branch merges.
+The last cited acceptance remains NO-GO; removing misleading revenue text is
+not a release or paid-service GO decision.[4]
 
----
+## Sources
 
-## Revenue streams beyond subscriptions
-
-**1. Managed migration service** (highest margin)
-Full done-for-you: depress team runs the migration, QAs every page, hands off a production-ready site. Price: $3k–$15k depending on site size. Gross margin ~70% once the tooling is mature. One or two of these per month covers operating costs.
-
-**2. Premium theme marketplace**
-Third-party Astro theme authors sell adapters through depress ($49–$149 one-time). You take 30%. Creates a network effect — more themes → more reasons to pay. Themes listed on astro.build already have audiences.
-
-**3. Hosting partnerships**
-Netlify, Vercel, and Cloudflare Pages all have referral programs. Every generated site can include a one-click "Deploy to Netlify" button. At scale this becomes meaningful passive revenue.
-
-**4. WordPress agency reseller program**
-WP agencies are scared of Astro but their clients are asking for Jamstack. Let agencies resell depress migrations as their own offering. They mark up 3x, you get $80–$200 per migration passively. Agencies become your sales force.
-
----
-
-## What makes enterprise deals close
-
-Enterprise buyers don't buy tools — they buy **risk reduction**. The pitch is not "Astro is faster than WordPress." The pitch is:
-
-> "You keep your content team. They edit posts in the same CMS-like interface. Your URLs don't change. Your SEO doesn't drop. Your infra bill goes from $2,000/mo to $40/mo. The migration takes a weekend, not six months."
-
-Three objections that kill deals and how to answer them:
-
-| Objection | Answer |
-|---|---|
-| "We have 800 pages of custom page builder content" | DB import reads ACF and custom post types. Unmappable content is flagged with a report, not silently dropped. |
-| "Our editors can't use markdown / git" | Keystatic admin is included. It looks like WordPress. No git knowledge needed. |
-| "What about SEO? We can't risk rankings" | The migration generates a full redirect map and preserves Yoast meta. We can show a pre-migration SEO diff. |
-
----
-
-## Where to find buyers
-
-**Inbound (content-led)**
-- Write "WordPress to Astro migration: what actually breaks" — ranks for high-intent searches, drives demo requests
-- Post the open-source CLI on Hacker News, Product Hunt, Astro Discord — developer adoption creates the bottom of the funnel
-- Guest posts on Smashing Magazine, CSS-Tricks, the Netlify/Vercel blogs
-
-**Outbound (agency-led)**
-- Target WP agencies on LinkedIn who list "WordPress" + "performance" + "Jamstack" in their services
-- Offer a free pilot migration (one small site) in exchange for a case study
-- The case study becomes the enterprise sales asset
-
-**Community**
-- Sponsor or present at WordCamp (ironic but the migration audience is there)
-- Astro Discord is full of developers who are pitching Astro to clients but can't close because of migration risk — give them the tool and they sell it for you
-
----
-
-## Pricing psychology note
-
-$299 one-time for Pro sounds cheap against a $10,000 manual migration — and it is. That's intentional. The goal at Pro is volume and word-of-mouth. The enterprise value is in **managed migrations + custom theme adapters**, not seat licensing. Price those on business value (time saved, risk avoided), not on feature lists.
-
----
-
-## 12-month milestone targets
-
-| Month | Goal |
-|---|---|
-| 1–2 | Ship web UI (Pro tier). First 10 paying customers from existing open-source users. |
-| 3–4 | First agency deal. One managed migration completed and documented as case study. |
-| 5–6 | Agency tier live. 3 active agency subscriptions. Theme marketplace with 2 third-party adapters. |
-| 7–9 | First enterprise contract ($4k+). WordPress VIP migration as flagship reference. |
-| 10–12 | $8–12k MRR. Hosting partnership with Netlify or Cloudflare live. |
+[1] https://github.com/depress-org/depress/issues/37
+[2] https://github.com/depress-org/depress/issues/23
+[3] https://github.com/depress-org/depress/issues/25
+[4] https://github.com/depress-org/depress/blob/86a495040e3a670c17276a96fdc253e31dc545f1/docs/PR-05-cold-acceptance.md
+[5] https://github.com/depress-org/depress/blob/86a495040e3a670c17276a96fdc253e31dc545f1/docs/security/issue23-admission.md
