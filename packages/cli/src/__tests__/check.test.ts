@@ -20,7 +20,7 @@ describe('checkRedirects', () => {
     try {
       const result = await checkRedirects(dir)
       expect(result.passed).toBe(false)
-      expect(result.detail).toMatch(/not found/)
+      expect(result.detail).toMatch(/source-manifest/)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -37,7 +37,7 @@ describe('checkRedirects', () => {
     }
   })
 
-  it('passes when redirects.json has entries covering published posts', async () => {
+  it('rejects unrelated redirect counts without a source manifest', async () => {
     const dir = await makeTempDir()
     try {
       await writeFile(
@@ -45,7 +45,7 @@ describe('checkRedirects', () => {
         JSON.stringify({ '/2020/01/hello/': '/blog/hello/', '/?p=1': '/blog/hello/' }),
       )
       const result = await checkRedirects(dir, 1)
-      expect(result.passed).toBe(true)
+      expect(result.passed).toBe(false)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -90,18 +90,18 @@ describe('checkAuthors', () => {
       await writeArticle(dir, 'post-2', { title: 'Post 2', author: '' })
       const result = await checkAuthors(dir)
       expect(result.passed).toBe(false)
-      expect(result.detail).toMatch(/post-2/)
+      expect(result.detail).toMatch(/source-manifest/)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
   })
 
-  it('passes when every post has an author', async () => {
+  it('rejects populated authors without a source manifest', async () => {
     const dir = await makeTempDir()
     try {
       await writeArticle(dir, 'post-1', { title: 'Post 1', author: 'Jane' })
       const result = await checkAuthors(dir)
-      expect(result.passed).toBe(true)
+      expect(result.passed).toBe(false)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -120,12 +120,12 @@ describe('checkSeoMeta', () => {
     }
   })
 
-  it('passes when seoDescription is populated', async () => {
+  it('rejects populated descriptions without source Yoast evidence', async () => {
     const dir = await makeTempDir()
     try {
       await writeArticle(dir, 'post-1', { title: 'Post 1', author: 'Jane', seoDescription: 'A description' })
       const result = await checkSeoMeta(dir)
-      expect(result.passed).toBe(true)
+      expect(result.passed).toBe(false)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -154,12 +154,12 @@ describe('checkMigrationReport', () => {
     }
   })
 
-  it('passes when the report shows 0 silent drops', async () => {
+  it('rejects Markdown zero-drop claims without machine evidence', async () => {
     const dir = await makeTempDir()
     try {
       await writeFile(join(dir, 'migration-report.md'), '# Report\n\n0 silent drops.')
       const result = await checkMigrationReport(dir)
-      expect(result.passed).toBe(true)
+      expect(result.passed).toBe(false)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile, mkdir, copyFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, basename, extname, dirname } from 'path'
 import matter from 'gray-matter'
+import type { WPPost, WPMedia } from '@depress-org/core'
 
 export interface TransformOptions {
   /** Directory produced by wordpress-export-to-markdown (has posts/ and pages/ subdirs) */
@@ -13,6 +14,8 @@ export interface TransformOptions {
   /** Post slug → author display name map, derived from WPPost.author (dc:creator). wp2md's own
    *  markdown frontmatter does not carry author, so it must be supplied separately. */
   authorsBySlug?: Map<string, string>
+  sourcePosts?: WPPost[]
+  attachmentMedia?: WPMedia[]
 }
 
 export interface TransformResult {
@@ -169,12 +172,27 @@ async function transformMarkdownFile(
   destPath: string,
   fmBuilder: (raw: Record<string, unknown>, body: string, author?: string) => Record<string, unknown>,
   author?: string,
+  source?: WPPost,
+  media?: WPMedia[],
 ): Promise<void> {
   const raw = await readFile(srcPath, 'utf-8')
   const { data, content } = matter(raw)
 
   const updatedFm = fmBuilder(data, content, author)
-  const updatedBody = rewriteImagePaths(content)
+  if (source) {
+    updatedFm.author = source.author
+    if (source.seoTitle) updatedFm.seoTitle = source.seoTitle
+    if (source.seoDescription) updatedFm.seoDescription = source.seoDescription
+  }
+  let updatedBody = rewriteImagePaths(content)
+  // An attachment alt is a fallback for empty image alt, never overwrite an author's inline alt.
+  for (const attachment of media ?? []) {
+    let name: string
+    try { name = decodeURIComponent(new URL(attachment.url, 'https://source.invalid').pathname.split('/').pop() ?? '') } catch { continue }
+    if (!attachment.altText || !name || (media ?? []).filter(m => m.url.split('/').pop() === attachment.url.split('/').pop()).length !== 1) continue
+    updatedBody = updatedBody.replace(/!\[\]\((\/media\/[^\s)]+)\)/g, (image, url) =>
+      url === `/media/${name}` ? `![${attachment.altText.replace(/[\[\]\r\n]/g, ' ')}](${url})` : image)
+  }
 
   // Stringify back with gray-matter
   const output = matter.stringify(updatedBody, updatedFm)
@@ -193,6 +211,8 @@ async function walkTypeDir(
   imageRegistry: Map<string, string>,
   isDraft = false,
   authorsBySlug?: Map<string, string>,
+  sourcePosts?: WPPost[],
+  media?: WPMedia[],
 ): Promise<{ transformed: number; imagesCopied: number; imageFailed: string[] }> {
   let transformed = 0
   let imagesCopied = 0
@@ -216,7 +236,8 @@ async function walkTypeDir(
     const srcMd = join(srcSlugDir, mdFile.name)
     const destMd = join(contentDir, slug, 'index.mdoc')
 
-    await transformMarkdownFile(srcMd, destMd, fmBuilder, authorsBySlug?.get(slug))
+    const sources = sourcePosts?.filter(p => p.slug === slug) ?? []
+    await transformMarkdownFile(srcMd, destMd, fmBuilder, authorsBySlug?.get(slug), sources.length === 1 ? sources[0] : undefined, media)
     transformed++
 
     // Copy images from posts/slug/images/ → public/media/
@@ -262,6 +283,8 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
     imageRegistry,
     false,
     authorsBySlug,
+    options.sourcePosts?.filter(p => p.type === 'post' && p.status === 'publish'),
+    options.attachmentMedia,
   )
 
   // Transform draft posts
@@ -273,6 +296,8 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
     imageRegistry,
     true,
     authorsBySlug,
+    options.sourcePosts?.filter(p => p.type === 'post' && p.status !== 'publish'),
+    options.attachmentMedia,
   )
 
   // Transform pages
@@ -282,6 +307,10 @@ export async function transformWp2mdOutput(options: TransformOptions): Promise<T
     mediaDir,
     buildPageFrontmatter,
     imageRegistry,
+    false,
+    undefined,
+    options.sourcePosts?.filter(p => p.type === 'page' && p.status === 'publish'),
+    options.attachmentMedia,
   )
 
   return {

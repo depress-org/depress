@@ -176,6 +176,14 @@ describe('shared job lifecycle #16', () => {
     expect(deploy).not.toHaveBeenCalled()
     expect((await root.forOwner('alice').get(job.id))?.status).toBe('queued')
   })
+  it('report quality failure prevents done and deployment', async () => {
+    migrate.mockResolvedValue({ qualityPassed: false })
+    const job = await store.create({ ...input, mode: 'deploy' })
+    const result = await runJob(store, job.id, { deployment })
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('MIGRATION_QUALITY_FAILED')
+    expect(deploy).not.toHaveBeenCalled()
+  })
   it('unknown job id rejects', async () => {
     await expect(runJob(store, 'missing')).rejects.toThrow('Job not found')
   })
