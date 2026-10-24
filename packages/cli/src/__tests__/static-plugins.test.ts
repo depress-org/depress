@@ -120,7 +120,7 @@ describe('#30 actual shared service / built CLI parity', () => {
     expect(r.compatibility.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ sourceId: 1, code: 'WP_DYNAMIC_UNSUPPORTED', classification: 'unsupported-dynamic' })]))
     expect((await validateMigrationReport(f.output)).passed).toBe(false)
   }, 30000)
-  it.each(['DEPRESSGALLERY0', '[[gallery ids="11"]]', '[gallery ids="11]'])('token pipeline preserves safe literal text: %s', async text => {
+  it.each(['DEPRESSGALLERY0', '[[gallery ids="11"]]'])('token pipeline preserves safe literal text: %s', async text => {
     const f = await fixture(`<p>${text}</p>`)
     await writeFile(f.input, (await readFile(f.input, 'utf8')).replace(attachment(11, 'a', 'First &amp; мир'), '').replace(attachment(12, 'b', 'Second'), ''))
     await migrateSite({ ...f, staticPlugins: config })
@@ -129,17 +129,36 @@ describe('#30 actual shared service / built CLI parity', () => {
     expect(body).not.toContain('gallery: review manually')
     expect(body).not.toContain('![')
     const r = await report(f.output)
-    if (text === '[gallery ids="11]') {
-      expect(r.qualityPassed).toBe(false)
-      expect(r.compatibility.occurrences).toEqual([expect.objectContaining({ tag: 'gallery', classification: 'manual-review', outcome: 'not-preserved', start: 3, end: 20 })])
-      expect(r.compatibility.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'WP_SHORTCODE_UNRESOLVED' })]))
-      const manifest = JSON.parse(await readFile(join(f.output, 'source-manifest.json'), 'utf8'))
-      expect((await writeMigrationReports(f.output, manifest, r.layout)).compatibility).toEqual(r.compatibility)
-    } else {
-      expect(r.compatibility.occurrences).toEqual([])
-      expect(r.qualityPassed).toBe(true)
-      expect((await validateMigrationReport(f.output)).passed).toBe(true)
-    }
+    expect(r.compatibility.occurrences).toEqual([])
+    expect(r.qualityPassed).toBe(true)
+    expect((await validateMigrationReport(f.output)).passed).toBe(true)
+  }, 30000)
+  it.each([false, true])('P04/P10 malformed attributes stay private with service/CLI parity (enabled: %s)', async enabled => {
+    const sentinel = 'PRIVATE_QA_MALFORMED_ATTRIBUTE_924'
+    const text = `<p>Before [contact-form password="${sentinel}] inner safe.</p><p>After safe.</p>`
+    const f = await fixture(text)
+    const result = await migrateSite({ ...f, ...(enabled ? { staticPlugins: config } : {}) })
+    expect(result.qualityPassed).toBe(false)
+    const body = await readFile(join(f.output, 'src/content/articles/gallery/index.mdoc'), 'utf8')
+    expect(body).not.toContain(sentinel)
+    expect(body).not.toContain('password')
+    expect(body).toContain('Before')
+    expect(body).toContain('inner safe.')
+    expect(body).toContain('After safe.')
+    expect(body).toMatch(/<!-- depress review [a-f0-9]{64} -->/)
+    const r = await report(f.output)
+    expect(JSON.stringify(r.compatibility)).not.toContain(sentinel)
+    expect(r.compatibility.occurrences).toEqual([expect.objectContaining({ tag: 'contact-form', outcome: 'not-preserved', start: text.indexOf('[contact-form'), end: text.indexOf(']') + 1 })])
+    expect(r.compatibility.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'WP_DYNAMIC_UNSUPPORTED' })]))
+    const manifest = JSON.parse(await readFile(join(f.output, 'source-manifest.json'), 'utf8'))
+    expect(manifest.items[0].content).toBe(text)
+    expect((await writeMigrationReports(f.output, manifest, r.layout)).compatibility).toEqual(r.compatibility)
+    expect((await validateMigrationReport(f.output)).passed).toBe(false)
+    const path = join(f.dir, 'plugins.json'); await writeFile(path, JSON.stringify(config))
+    const output = join(f.dir, 'cli')
+    expect(cli(['--input', f.input, '--wp-dir', f.wpDir, '--output', output, '--theme', 'scaffold', ...(enabled ? ['--static-plugins', path] : [])]).status).toBe(1)
+    expect(await readFile(join(output, 'src/content/articles/gallery/index.mdoc'), 'utf8')).toBe(body)
+    expect(await report(output)).toEqual(r)
   }, 30000)
   it('P05 plugin off leaves explicit review and preserves versions/coverage', async () => {
     const f = await fixture(); expect((await migrateSite(f)).qualityPassed).toBe(false)

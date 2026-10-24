@@ -47,8 +47,8 @@ export function scanShortcodes(content: string, sourceKey: string): ShortcodeTok
       else if (ch === '[' || ch === '\n' || ch === '\r') break
     }
     if (content[end] !== ']' || quote) {
-      // Keep stable evidence for an unterminated candidate without claiming a
-      // supported boundary or hiding its safe text from the converter.
+      // Keep stable private evidence for an unterminated candidate. Mask only
+      // this bounded span; surrounding/inner prose remains with the converter.
       let stop = attrsStart
       while (stop < content.length && !['\n', '\r', '<', '['].includes(content[stop])) {
         if (content[stop++] === ']') break
@@ -69,13 +69,13 @@ export function scanShortcodes(content: string, sourceKey: string): ShortcodeTok
 
 export function maskShortcodes(content: string, tokens: ShortcodeToken[]): string {
   let result = '', start = 0
-  for (const token of tokens.filter(t => !t.malformed)) { result += content.slice(start, token.start) + token.marker; start = token.end }
+  for (const token of tokens) { result += content.slice(start, token.start) + token.marker; start = token.end }
   return result + content.slice(start)
 }
 
 /** Source prose excludes boundaries but retains ordinary inner HTML/text. */
 export function shortcodeSourceText(content: string, sourceKey: string): string {
   let result = '', start = 0
-  for (const token of scanShortcodes(content, sourceKey).filter(t => !t.malformed)) { result += content.slice(start, token.start); start = token.end }
+  for (const token of scanShortcodes(content, sourceKey)) { result += content.slice(start, token.start); start = token.end }
   return result + content.slice(start)
 }
