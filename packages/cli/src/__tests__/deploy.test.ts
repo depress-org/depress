@@ -89,7 +89,7 @@ describe('typed deploy service', () => {
       const before = process.exitCode
       const spawn = mockSpawn(stage)
       await expect(
-        runDeploy({ dir, token: 'secret-token' }, spawn),
+        runDeploy({ dir, token: 'secret-token', projectName: 'site' }, spawn),
       ).rejects.toThrow(/failed/i)
       expect(process.exitCode).toBe(before)
       expect(spawn).toHaveBeenCalledTimes(stage)
@@ -97,7 +97,7 @@ describe('typed deploy service', () => {
   )
   it('rejects zero-exit deploy without URL', async () => {
     await expect(
-      runDeploy({ dir, token: 'secret-token' }, mockSpawn(-1, true)),
+      runDeploy({ dir, token: 'secret-token', projectName: 'site' }, mockSpawn(-1, true)),
     ).rejects.toThrow(/valid URL/)
   })
   it('uses an existing lock without resolving dependencies again', async () => {

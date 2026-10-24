@@ -13,7 +13,7 @@ vi.mock('@depress-org/depress/commands/deploy', async (importOriginal) => ({
 import { runJob, cleanupJob, isValidTheme } from '../pipeline.js'
 import { InMemoryJobStore } from '../types.js'
 const input = { wxrPath: 'fixture.xml', themeId: 'scaffold' }
-const deployment = { token: 'test', target: 'cloudflare-pages' as const }
+const deployment = { token: 'test', target: 'cloudflare-pages' as const, projectName: 'site' }
 let store: InMemoryJobStore
 beforeEach(() => {
   store = new InMemoryJobStore()
@@ -32,7 +32,7 @@ describe('shared job lifecycle #16', () => {
     const job = await store.create(input)
     const seen: string[] = []
     const result = await runJob(store, job.id, {
-      onProgress: (j) => seen.push(j.status),
+      onProgress: (j) => { seen.push(j.status) },
     })
     expect(result.status).toBe('done')
     expect(result.deployUrl).toBeUndefined()
@@ -44,7 +44,7 @@ describe('shared job lifecycle #16', () => {
     const seen: string[] = []
     const result = await runJob(store, job.id, {
       deployment,
-      onProgress: (j) => seen.push(j.status),
+      onProgress: (j) => { seen.push(j.status) },
     })
     expect(result.deployUrl).toBe('https://site.pages.dev')
     expect(seen).toEqual(['migrating', 'building', 'deploying', 'done'])
@@ -129,6 +129,45 @@ describe('shared job lifecycle #16', () => {
     const job = await store.create({ ...input, mode: 'deploy' })
     expect((await runJob(store, job.id, { deployment })).status).toBe('failed')
   })
+  it.each([undefined, '', ' ', 'bad;name', '-option', 'x'.repeat(64)])(
+    'rejects missing/invalid trusted project name %s before allocating output',
+    async (projectName) => {
+      const job = await store.create({ ...input, mode: 'deploy', projectName: 'untrusted-fallback' })
+      const result = await runJob(store, job.id, { deployment: { ...deployment, projectName } })
+      expect(result.status).toBe('failed')
+      expect(result.error).toContain('INVALID_PROJECT')
+      expect(result.outputDir).toBeUndefined()
+      expect(migrate).not.toHaveBeenCalled()
+      expect(deploy).not.toHaveBeenCalled()
+    },
+  )
+  it.each(['scaffold', 'invalid-theme'])('observer mutation cannot rewrite %s result/store/input', async (themeId) => {
+    const original = { ...input, themeId }
+    const job = await store.create(original)
+    const result = await runJob(store, job.id, {
+      onProgress: (snapshot) => {
+        // Deliberately bypass readonly types: JS callers must be isolated too.
+        const mutable = snapshot as any
+        mutable.status = 'done'
+        mutable.deployUrl = 'https://fake.pages.dev'
+        mutable.input.themeId = 'observer-theme'
+        mutable.input.wxrPath = 'observer.xml'
+      },
+    })
+    expect(result.status).toBe(themeId === 'scaffold' ? 'done' : 'failed')
+    expect(result.deployUrl).toBeUndefined()
+    expect(result.input).toEqual({ ...input, themeId })
+    expect(await store.get(job.id)).toEqual(result)
+    expect(original).toEqual({ ...input, themeId })
+    if (themeId === 'scaffold') expect(migrate.mock.calls[0][0].input).toBe(input.wxrPath)
+  })
+  it('a pending async observer does not block pipeline completion', async () => {
+    const job = await store.create({ ...input, themeId: 'invalid-theme' })
+    const result = await runJob(store, job.id, {
+      onProgress: () => new Promise<void>(() => {}),
+    })
+    expect(result.status).toBe('failed')
+  }, 1000)
   it('unknown job id rejects', async () => {
     await expect(runJob(store, 'missing')).rejects.toThrow('Job not found')
   })

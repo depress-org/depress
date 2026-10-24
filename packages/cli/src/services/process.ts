@@ -74,6 +74,7 @@ export const defaultSpawn: SpawnFn = async (cmd, args, opts) => {
         stderr = '',
         size = 0
       let failure: ServiceError | undefined
+      let parentExited = false
       function kill() {
         if (!child.pid) return
         try {
@@ -85,11 +86,16 @@ export const defaultSpawn: SpawnFn = async (cmd, args, opts) => {
       }
       const timer = setTimeout(
         () => {
-          failure = new ServiceError(
-            'PROCESS_TIMEOUT',
-            'Child process timed out',
-          )
+          if (!parentExited)
+            failure ??= new ServiceError(
+              'PROCESS_TIMEOUT',
+              'Child process timed out',
+            )
           kill()
+          // An exited parent is not a timeout. Bound capture even if an escaped
+          // descendant retains a pipe; ordinary group descendants are reaped on exit.
+          child.stdout.destroy()
+          child.stderr.destroy()
         },
         Math.min(opts.timeoutMs ?? 120_000, 300_000),
       )
@@ -114,10 +120,13 @@ export const defaultSpawn: SpawnFn = async (cmd, args, opts) => {
           new ServiceError('PROCESS_START', 'Could not start child process'),
         )
       })
+      child.on('exit', () => {
+        parentExited = true
+        // close waits for inherited stdio: cleanup must begin at parent exit.
+        kill()
+      })
       child.on('close', (code) => {
         clearTimeout(timer)
-        // Also reap background descendants after a parent exits.
-        kill()
         if (failure) reject(failure)
         else resolve({ code, stdout, stderr })
       })

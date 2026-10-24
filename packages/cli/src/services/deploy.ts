@@ -25,6 +25,7 @@ export interface DeployOptions {
   dir?: string
   target?: DeployTarget
   token?: string
+  /** Explicit trusted name required by validation; no ambient provider config. */
   projectName?: string
   onStage?: (stage: 'building' | 'deploying') => void | Promise<void>
 }
@@ -35,7 +36,7 @@ export interface DeployResult {
 export interface DeployConfig {
   target: DeployTarget
   token: string
-  projectName?: string
+  projectName: string
 }
 
 /** Validate BEFORE migration/install/build. No ambient credential lookup in library code. */
@@ -50,13 +51,14 @@ export function validateDeployOptions(options: DeployOptions): DeployConfig {
       'UNSUPPORTED_TARGET',
       'Deployment target requires a trusted static-artifact adapter',
     )
-  if (
-    options.projectName &&
-    !/^[a-z0-9][a-z0-9-]{0,62}$/.test(options.projectName)
-  )
-    throw new ServiceError('INVALID_PROJECT', 'Invalid project name')
   if (!options.token?.trim())
     throw new ServiceError('MISSING_TOKEN', 'Deployment API token is required')
+  // Isolated noninteractive Wrangler has no trusted ambient config/cache fallback.
+  if (
+    typeof options.projectName !== 'string' ||
+    !/^[a-z0-9][a-z0-9-]{0,62}$/.test(options.projectName)
+  )
+    throw new ServiceError('INVALID_PROJECT', 'Explicit valid project name is required')
   return { target, token: options.token, projectName: options.projectName }
 }
 
@@ -152,7 +154,7 @@ export async function buildSite(
 
 export async function deployToCloudflarePages(
   dir: string,
-  opts: { token: string; projectName?: string },
+  opts: Pick<DeployConfig, 'token' | 'projectName'>,
   spawnFn: SpawnFn = defaultSpawn,
 ): Promise<SpawnResult> {
   validateDeployOptions({ ...opts, target: 'cloudflare-pages' })
@@ -188,8 +190,7 @@ export async function deployToCloudflarePages(
       dirname(require.resolve('wrangler/package.json')),
       'bin/wrangler.js',
     )
-    const args = [bin, 'pages', 'deploy', 'dist']
-    if (opts.projectName) args.push('--project-name', opts.projectName)
+    const args = [bin, 'pages', 'deploy', 'dist', '--project-name', opts.projectName]
     return await spawnFn(process.execPath, args, {
       cwd: scratch,
       env: {

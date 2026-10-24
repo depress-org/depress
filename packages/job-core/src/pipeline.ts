@@ -8,7 +8,7 @@ import {
   ServiceError,
   type DeployOptions,
 } from '@depress-org/depress/commands/deploy'
-import type { Job, JobStore } from './types.js'
+import type { Job, JobInput, JobStore } from './types.js'
 export { listThemes, getThemeAdapter }
 export { InMemoryJobStore } from './types.js'
 export type {
@@ -19,8 +19,13 @@ export type {
   DeployTargetId,
 } from './types.js'
 
+/** Detached, presentation-only view; nested input is readonly too. */
+export type JobSnapshot = Readonly<Omit<Job, 'input'>> & {
+  readonly input: Readonly<JobInput>
+}
 export interface RunJobOptions {
-  onProgress?: (job: Job) => void
+  /** Best-effort observation, never awaited by the pipeline. */
+  onProgress?: (job: JobSnapshot) => void | Promise<void>
   /** Trusted server-side opt-in, never copied from an upload/request body. */
   deployment?: Omit<DeployOptions, 'dir' | 'onStage'>
 }
@@ -57,9 +62,11 @@ async function execute(
   const input = { ...job.input }
   async function update(status: Job['status'], extra: Partial<Job> = {}) {
     const updated = await store.update(jobId, { ...extra, status })
-    // A presentation callback cannot change job success/failure.
+    // Do not expose the store's object (including input), or wait for UI/network IO.
+    // Promise.resolve also consumes asynchronous rejection after runJob returns.
     try {
-      opts.onProgress?.(updated)
+      if (opts.onProgress)
+        void Promise.resolve(opts.onProgress(structuredClone(updated))).catch(() => {})
     } catch {
       /* observer only */
     }
