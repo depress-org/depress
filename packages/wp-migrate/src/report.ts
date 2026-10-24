@@ -4,7 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 import matter from 'gray-matter'
 import TurndownService from 'turndown'
-import Markdoc from '@markdoc/markdoc'
+import Markdoc, { type RenderableTreeNode } from '@markdoc/markdoc'
 import { proveScaffoldDraftExclusion } from './report-privacy.js'
 import type { WPExport, SourceManifest, SourceItem, ReportLayout, MigrationReportV1, MigrationItem, MigrationMedia, ReportFinding } from '@depress-org/core'
 
@@ -84,9 +84,53 @@ function expectedPath(item: SourceItem, layout: ReportLayout): string {
   if (!dir || !safeRelative(dir) || !safeRelative(item.slug) || item.slug.includes('/') || !/^[a-zA-Z0-9]+$/.test(layout.fileExt)) throw new UnsafePath('Invalid output layout or slug')
   return `${dir}/${item.slug}${(item.type === 'page' ? layout.pagesUseDirectoryEntries : layout.useDirectoryEntries) ? '/index' : ''}.${layout.fileExt}`
 }
-// Compare complete normalized prose, not only nonempty/count heuristics. Media and shortcodes have separate checks.
-const markdownText = (value: string) => value.replace(/<img\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
-const sourceText = (value: string) => markdownText(new TurndownService().turndown(value))
+// Compare complete normalized VISIBLE text, never literal Markdown/metadata.
+// Images have separate per-occurrence evidence; punctuation/spacing remain normalized.
+const normalizeText = (value: string) => value.replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+const staticNodes = new Set(['blockquote', 'code', 'comment', 'document', 'em', 'fence', 'hardbreak', 'heading', 'hr', 'image', 'inline', 'item', 'link', 'list', 'paragraph', 's', 'softbreak', 'strong', 'table', 'tbody', 'td', 'text', 'th', 'thead', 'tr'])
+function staticDocument(value: string) {
+  const tokenizer = new Markdoc.Tokenizer({ allowComments: true })
+  const ast = Markdoc.parse(tokenizer.tokenize(value))
+  // Only built-in, static grammar may reach transform. Never resolve variables,
+  // functions, custom tags, annotations or slots, even alongside retained prose.
+  if ([ast, ...ast.walk()].some(node => !staticNodes.has(node.type) || node.errors.length || node.annotations.length || Object.keys(node.slots).length ||
+    Object.values(node.attributes).some(value => value !== null && !['string', 'number', 'boolean'].includes(typeof value)))) throw new Error('Unproven Markdoc context')
+  if (Markdoc.validate(ast).length) throw new Error('Invalid Markdoc document')
+  return ast
+}
+const blockTags = new Set(['article', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'pre'])
+const inlineTags = new Set(['em', 'strong', 's', 'a', 'code'])
+function renderedText(node: RenderableTreeNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (node === null || typeof node === 'boolean') return ''
+  if (Array.isArray(node)) return node.map(renderedText).join('')
+  if (!Markdoc.Tag.isTag(node)) throw new Error('Unproven rendered node')
+  if (node.name === 'img') return '' // alt/src/title are not body prose
+  if (node.name === 'br' || node.name === 'hr') return '\n'
+  const content = node.children.map(renderedText).join('')
+  if (blockTags.has(node.name)) return `\n${content}\n`
+  if (inlineTags.has(node.name)) return content // Do not split Bo**dy** into words.
+  throw new Error('Unproven rendered element')
+}
+function bodyText(value: string, fileExt: string): string | undefined {
+  if (fileExt !== 'mdoc') return undefined
+  try { return normalizeText(renderedText(Markdoc.transform(staticDocument(value)))) }
+  catch { return undefined } // Unknown renderer/dynamic context is NOT empty-text proof.
+}
+function sourceText(value: string): string {
+  // Source is HTML, not Markdoc. Flatten parsed HTML without introducing Markdown
+  // formatting or reparsing escaped literal examples as active comments/tags.
+  const html = new TurndownService()
+  html.addRule('report-visible-text', {
+    filter: () => true,
+    replacement: (content, node) => {
+      if (node.nodeName === 'BR') return '\n'
+      if (['IMG', 'SCRIPT', 'STYLE', 'TEMPLATE', 'HEAD'].includes(node.nodeName)) return ''
+      return 'isBlock' in node && node.isBlock ? `\n${content}\n` : content
+    },
+  })
+  return normalizeText(html.turndown(value))
+}
 const finding = (findings: ReportFinding[], code: string, detail: string) => findings.push({ code, detail })
 
 type ImageEvidence = { src: string; alt: string }
@@ -189,7 +233,9 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
       if (fm.data.title !== source.title) finding(item.findings, 'title-mismatch', 'Output title differs from source title')
       if (fm.data.author !== source.author) finding(item.findings, 'author-mismatch', `Author for source ID ${source.id} was not preserved exactly`)
       if (source.content.trim() && !fm.content.trim()) finding(item.findings, 'empty-body', 'Nonempty source has empty output body')
-      if (sourceText(source.content) !== markdownText(fm.content)) finding(item.findings, 'body-text-mismatch', 'Complete normalized source prose differs from destination body')
+      const expectedText = sourceText(source.content)
+      const actualText = bodyText(fm.content, layout.fileExt)
+      if (expectedText === undefined || actualText === undefined || expectedText !== actualText) finding(item.findings, 'body-text-mismatch', 'Complete normalized visible source prose differs from destination body or its render context is unproven')
       for (const [field, mapped, code] of [['seoTitle', 'title', 'seo-title-mismatch'], ['seoDescription', 'description', 'seo-description-mismatch']] as const) {
         if (source[field] !== undefined && (fm.data[field] ?? fm.data.metadata?.[mapped] ?? fm.data.seo?.[mapped]) !== source[field]) finding(item.findings, code, `Source ${field} was not preserved exactly`)
       }

@@ -36,6 +36,73 @@ describe('source inventory and migration reports', () => {
     await put(d, 'src/content/articles/hello/index.mdoc', '---\ntitle: Hello\nauthor: alice\n---\nChanged')
     expect((await validateMigrationReport(d)).passed).toBe(false)
   })
+  it.each([
+    '<!-- Body -->',
+    '<!-- Bo -->dy',
+    'Bo<!-- dy -->',
+    '```Body\n\n```',
+    '{% if false %}\nBody\n{% /if %}',
+    '{% comment %}\nBody\n{% /comment %}',
+    '{% $Body %}',
+    'Body {% .hidden %}',
+    'Body {% #unknown %}',
+    '{% unknown %}Body{% /unknown %}',
+  ])('rejects nonrendered or unproven body prose despite unchanged frontmatter: %s', async body => {
+    const d = await temp(); await good(d)
+    await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\nexcerpt: Body\n---\n${body}`)
+    const r = await writeMigrationReports(d, manifest(), layout)
+    expect(r.qualityPassed).toBe(false)
+    expect(codes(r)).toContain('body-text-mismatch')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it.each([
+    'Body', '**Bo**dy', 'Bo*dy*', '[Bo](https://example.invalid)dy',
+    '# Body', '> Body', '- Body', 'Bo&#100;y',
+    'Body<!-- ignored comment -->', '<!-- ignored comment -->\nBody',
+    '`Body`', '~~~text\nBody\n~~~',
+  ])('accepts complete visible body text in ordinary static formatting: %s', async body => {
+    const d = await temp(); await good(d)
+    await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
+    expect((await writeMigrationReports(d, manifest(), layout)).qualityPassed).toBe(true)
+    expect((await validateMigrationReport(d)).passed).toBe(true)
+  })
+  it.each(['\\*Body\\*', '`<!-- Body -->`', '~~~html\n<!-- Body -->\n~~~'])('compares escaped/code syntax as visible literal text, not executable markup: %s', async body => {
+    const d = await temp(); await good(d)
+    const source = body.includes('<!--') ? '<p>&lt;!-- Body --&gt;</p>' : '<p>*Body*</p>'
+    await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
+    expect((await writeMigrationReports(d, manifest(item(1, 'post', 'hello', 'publish', '', source)), layout)).qualityPassed).toBe(true)
+    expect((await validateMigrationReport(d)).passed).toBe(true)
+  })
+  it('fails closed for unknown prose renderers even with identical literal body', async () => {
+    const d = await temp(); await good(d)
+    await put(d, 'src/content/articles/hello/index.md', '---\ntitle: Hello\nauthor: alice\n---\nBody')
+    const r = await writeMigrationReports(d, manifest(), { ...layout, fileExt: 'md' })
+    expect(r.qualityPassed).toBe(false); expect(codes(r)).toContain('body-text-mismatch')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it.each(['Body <!-- retained -->words', '<!-- Body --> retained words'])('rejects hidden words even when other body prose survives: %s', async body => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1, 'post', 'hello', 'publish', '', '<p>Body retained words</p>'))
+    await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
+    const r = await writeMigrationReports(d, m, layout)
+    expect(r.qualityPassed).toBe(false); expect(codes(r)).toContain('body-text-mismatch')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it('rejects unproven text even when both source and destination normalize empty', async () => {
+    const d = await temp(); await good(d)
+    await put(d, 'src/content/articles/hello/index.mdoc', '---\ntitle: Hello\nauthor: alice\n---\n{% $Body %}')
+    const r = await writeMigrationReports(d, manifest(item(1, 'post', 'hello', 'publish', '', '<!-- Body -->')), layout)
+    expect(r.qualityPassed).toBe(false); expect(codes(r)).toContain('body-text-mismatch')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it.each([['Bo  \ndy', true], ['Body', false]])('preserves source HTML line-break word boundaries: %s', async (body, passed) => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1, 'post', 'hello', 'publish', '', '<p>Bo<br>dy</p>'))
+    await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
+    const r = await writeMigrationReports(d, m, layout)
+    expect(r.qualityPassed).toBe(passed)
+    expect((await validateMigrationReport(d)).passed).toBe(passed)
+  })
   it('uses flat pages, skips drafts, and identifies unsupported published types', async () => {
     const d = await temp(); await good(d)
     await put(d, 'src/content/pages/about.mdoc', '---\ntitle: Hello\nauthor: alice\n---\nBody')
