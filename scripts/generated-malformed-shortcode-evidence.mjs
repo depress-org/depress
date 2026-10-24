@@ -50,7 +50,9 @@ export async function verifyGeneratedMalformedShortcodeEvidence(root) {
       assert.equal(report.qualityPassed, false)
       assert(!JSON.stringify(report.compatibility).includes(sentinel))
       assert(report.compatibility.occurrences.every(o => o.outcome === 'not-preserved'))
-      assert(report.compatibility.diagnostics.some(d => d.code === 'WP_DYNAMIC_UNSUPPORTED'))
+      // H1's malformed dynamic form differs from H2's balanced unknown widget.
+      // Both are unowned/non-green, with their original source-linked diagnosis.
+      assert(report.compatibility.diagnostics.some(d => d.sourceId === 101 && d.code === (index < 2 ? 'WP_DYNAMIC_UNSUPPORTED' : 'WP_SHORTCODE_UNRESOLVED')))
       assert.equal((await validateMigrationReport(output)).passed, false)
       await symlink(join(root, 'node_modules'), join(output, 'node_modules'), 'dir')
       execFileSync('npm', ['run', 'build', '--workspaces=false'], { cwd: output, stdio: 'inherit', timeout: 120000 })
