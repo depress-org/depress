@@ -31,13 +31,13 @@ export async function verifyGeneratedNativeEvidence(root) {
   await symlink(join(root, 'node_modules'), join(output, 'node_modules'), 'dir')
   const build = () => execFileSync('npm', ['run', 'build', '--workspaces=false'], { cwd: output, stdio: 'inherit' })
   build()
-  const html = await readFile(join(output, 'dist/blog/first-post/index.html'), 'utf8')
+  const html = await readFile(join(output, 'dist/client/blog/first-post/index.html'), 'utf8')
   const actualImages = [...html.matchAll(/<img\b[^>]*src="\/media\/photo.png"[^>]*>/g)].map(m => m[0])
   // The cover is outside body evidence; the final three images are the source
   // body's exact ordered occurrences, including the empty-alt fallback.
   assert.deepEqual(actualImages.slice(-3).map(tag => /\balt="([^"]*)"/.exec(tag)?.[1]?.replace(/&(?:amp|#38|#x26);/gi, '&')), ['First context', 'Second context & quote', 'Attachment fallback'])
   assert(html.includes('First body marker alpha.'))
-  for (const name of ['source-manifest.json', 'migration-report.json', 'migration-report.md']) await assert.rejects(readFile(join(output, 'dist', name)), { code: 'ENOENT' })
+  for (const name of ['source-manifest.json', 'migration-report.json', 'migration-report.md']) await assert.rejects(readFile(join(output, 'dist/client', name)), { code: 'ENOENT' })
   await writeFile(path, original.replace('![Second context & quote]', '![Wrong alt]'))
   const negative = await writeMigrationReports(output, manifest, report.layout)
   assert.equal(negative.qualityPassed, false)

@@ -158,6 +158,10 @@ export async function deployToCloudflarePages(
   spawnFn: SpawnFn = defaultSpawn,
 ): Promise<SpawnResult> {
   validateDeployOptions({ ...opts, target: 'cloudflare-pages' })
+  // Astro7 Cloudflare targets Workers; Node themes also emit dist/server.
+  // Never upload server code/config as if it were a static Pages artifact.
+  if (existsSync(join(dir, 'dist/server')) || existsSync(join(dir, '.wrangler/deploy/config.json')))
+    throw new ServiceError('UNSUPPORTED_ARTIFACT', 'Server/Workers artifacts require a separately reviewed deployment adapter')
   const scratch = await workspace('deploy-artifacts-')
   try {
     // Copy only static artifacts, not package.json, node_modules, .env or provider config.

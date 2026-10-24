@@ -62,3 +62,5 @@ examples/mamas-blog/src/content/categories/
 examples/mamas-blog/src/content/tags/
 examples/mamas-blog/public/media/
 examples/mamas-blog/sources/
+# Local Workers build/emulator state; never published or committed
+.wrangler/
