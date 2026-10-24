@@ -1,8 +1,10 @@
-import { readdir, readFile, writeFile, mkdir, copyFile, rm, cp } from 'fs/promises'
+import { readdir, readFile, mkdir, rm, cp } from 'fs/promises'
+const writeFile = async (path: string, data: string, _encoding: string) => safeWriteFile(dirname(path), path.split('/').at(-1)!, data)
+const copyFile = async (src: string, dest: string) => safeWriteFile(dirname(dest), dest.split('/').at(-1)!, await readFile(src))
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { spawn } from 'child_process'
+import { assertSafeTree, safeSegment, assertUniqueSegments, safeWriteFile } from './input-boundary.js'
 import matter from 'gray-matter'
 import type { ThemeAdapter, PatchConfigOpts } from './themes/types.js'
 
@@ -19,6 +21,8 @@ const _bundledRoot = join(dirname(_thisFile), '..', 'bundled-themes')
  * Otherwise the theme tarball is downloaded from GitHub.
  */
 export async function provisionTheme(adapter: ThemeAdapter, outputDir: string): Promise<void> {
+  if (adapter.fileExt !== 'md') throw new Error('MDX-only themes are disabled for untrusted content')
+  await assertSafeTree(outputDir)
   if (adapter.bundled) {
     await copyBundledTheme(adapter, outputDir)
   } else {
@@ -36,25 +40,14 @@ async function copyBundledTheme(adapter: ThemeAdapter, outputDir: string): Promi
     )
   }
   await mkdir(outputDir, { recursive: true })
+  await assertSafeTree(src)
   // Node 16.7+ recursive copy
   await cp(src, outputDir, { recursive: true })
 }
 
 /** Download a GitHub theme repo tarball and extract into outputDir */
 export async function downloadTheme(adapter: ThemeAdapter, outputDir: string): Promise<void> {
-  await mkdir(outputDir, { recursive: true })
-  const url = `https://github.com/${adapter.repo}/archive/refs/heads/${adapter.branch}.tar.gz`
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      'sh',
-      ['-c', `curl -sL "${url}" | tar xz --strip-components=1 -C "${outputDir}"`],
-      { stdio: 'inherit' },
-    )
-    child.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`Theme download exited ${code}`)),
-    )
-    child.on('error', reject)
-  })
+  throw new Error('Remote theme downloads require a bounded trusted downloader; use a bundled theme')
 }
 
 /** Delete all .md/.mdx sample files from the theme's content directories */
@@ -97,6 +90,15 @@ export async function injectContent(
   adapter: ThemeAdapter,
   siteAuthor: string,
 ): Promise<InjectResult> {
+  // Uploaded content is data, never executable MDX. Do not silently rename it
+  // into a compiler input with ESM, JSX or expression evaluation semantics.
+  // MDX-only adapters must opt into plain Markdown support before migration.
+  if (adapter.fileExt !== 'md') {
+    throw new Error(`Theme "${adapter.id}" requires executable MDX; untrusted content migration requires a plain Markdown (.md) adapter`)
+  }
+
+  await assertSafeTree(contentTmpDir)
+  await assertSafeTree(outputDir)
   const destContentDir = join(outputDir, adapter.contentDir)
   const destMediaDir = join(outputDir, adapter.mediaDir)
 
@@ -109,13 +111,14 @@ export async function injectContent(
   const articlesDir = join(contentTmpDir, 'src', 'content', 'articles')
   if (existsSync(articlesDir)) {
     const slugDirs = await readdir(articlesDir, { withFileTypes: true })
+    assertUniqueSegments(slugDirs.map(e => e.name))
     for (const entry of slugDirs) {
       if (!entry.isDirectory() || entry.name.startsWith('_')) continue
       const mdocPath = join(articlesDir, entry.name, 'index.mdoc')
       if (!existsSync(mdocPath)) continue
 
       const raw = await readFile(mdocPath, 'utf-8')
-      const { data, content } = matter(raw)
+      const { data, content } = parseIntermediateContent(raw)
 
       const themeFm = adapter.mapFrontmatter(data as Parameters<ThemeAdapter['mapFrontmatter']>[0], siteAuthor)
       let destFile: string
@@ -125,7 +128,7 @@ export async function injectContent(
       } else {
         destFile = join(destContentDir, `${entry.name}.${adapter.fileExt}`)
       }
-      await writeFile(destFile, matter.stringify(content, themeFm), 'utf-8')
+      await writeFile(destFile, matter.stringify(content.replace(/</g, '&lt;'), themeFm), 'utf-8')
       postsInjected++
     }
   }
@@ -139,20 +142,21 @@ export async function injectContent(
 
     if (existsSync(pagesDir)) {
       const slugDirs = await readdir(pagesDir, { withFileTypes: true })
+      assertUniqueSegments(slugDirs.map(e => e.name))
       for (const entry of slugDirs) {
         if (!entry.isDirectory()) continue
         const mdocPath = join(pagesDir, entry.name, 'index.mdoc')
         if (!existsSync(mdocPath)) continue
 
         const raw = await readFile(mdocPath, 'utf-8')
-        const { data, content } = matter(raw)
+        const { data, content } = parseIntermediateContent(raw)
 
         const themeFm = adapter.mapPageFrontmatter
           ? adapter.mapPageFrontmatter(data as Parameters<NonNullable<ThemeAdapter['mapPageFrontmatter']>>[0])
           : { title: (data as Record<string, unknown>).title ?? 'Page' }
 
         const destFile = join(destPagesDir, `${entry.name}.${adapter.fileExt}`)
-        await writeFile(destFile, matter.stringify(content, themeFm), 'utf-8')
+        await writeFile(destFile, matter.stringify(content.replace(/</g, '&lt;'), themeFm), 'utf-8')
         pagesInjected++
       }
     }
@@ -176,16 +180,26 @@ export async function injectContent(
     }
 
     const files = await readdir(sourceMedia)
+    assertUniqueSegments(files)
     for (const file of files) {
-      await copyFile(join(sourceMedia, file), join(destMedia, file)).catch(() => {})
+      safeSegment(file)
+      await copyFile(join(sourceMedia, file), join(destMedia, file))
       if (destMedia !== publicMediaAlias) {
-        await copyFile(join(sourceMedia, file), join(publicMediaAlias, file)).catch(() => {})
+        await copyFile(join(sourceMedia, file), join(publicMediaAlias, file))
       }
       mediaFiles++
     }
   }
 
   return { postsInjected, pagesInjected, mediaFiles }
+}
+
+/** Only YAML frontmatter is accepted; gray-matter also has executable JS engines. */
+function parseIntermediateContent(raw: string): ReturnType<typeof matter> {
+  if (!/^---(?:ya?ml)?[ \t]*\r?\n/.test(raw)) {
+    throw new Error('Intermediate content requires YAML frontmatter')
+  }
+  return matter(raw)
 }
 
 // Re-export PatchConfigOpts for convenience

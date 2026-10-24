@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { runMigrate } from '../commands/migrate.js'
 
 // Intentionally synthetic local test fixture, not user/market evidence. No media/network.
-export const xml = `<?xml version="1.0"?><rss version="2.0" xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><title>Fixture</title><link>https://fixture.invalid</link><wp:wxr_version>1.2</wp:wxr_version><item><title>Hello</title><link>https://fixture.invalid/hello/</link><pubDate>Mon, 01 Jan 2024 12:00:00 +0000</pubDate><dc:creator>fixture-author</dc:creator><content:encoded><![CDATA[<p>Local fixture body.</p>]]></content:encoded><wp:post_id>1</wp:post_id><wp:post_date>2024-01-01 12:00:00</wp:post_date><wp:post_name>hello</wp:post_name><wp:status>publish</wp:status><wp:post_type>post</wp:post_type></item></channel></rss>`
+import { xml } from '../__fixtures__/single-export.js'
 let root: string, input: string
 beforeEach(async () => {
   await mkdir('.tmp', { recursive: true })
@@ -42,13 +42,13 @@ describe('real shared migration #16', () => {
       runMigrate({ input, output: join(root, 'out'), theme: 'unknown' }),
     ).rejects.toThrow('Unknown theme')
   })
-  it('detects upstream converter errors even when the child exits zero', async () => {
+  it('native converter does not depend on upstream pubDate field', async () => {
     await writeFile(input, xml.replace(/<pubDate>.*?<\/pubDate>/, ''))
     await expect(
       runMigrate({ input, output: join(root, 'out'), theme: 'scaffold' }),
-    ).rejects.toThrow()
+    ).resolves.toMatchObject({ posts: 1 })
   })
-  it('runs actual wp2md and scaffold concurrently with isolated content/output', async () => {
+  it('runs native conversion and scaffold concurrently with isolated content/output', async () => {
     const before = process.exitCode
     const [a, b] = await Promise.all(
       ['a', 'b'].map((name) =>

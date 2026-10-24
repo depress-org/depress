@@ -24,11 +24,11 @@ program
   .command('migrate')
   .description('Migrate WordPress site to Astro + Keystatic (full pipeline)')
   .option('-i, --input <path>', 'Path to WordPress XML export file')
-  .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (for local image serving)')
+  .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (contained local raster copies; no network fallback)')
   .option('--db <path>', 'WordPress MySQL dump (.sql) — enables Yoast SEO, ACF fields, author profiles')
   .option('-o, --output <path>', 'Output directory', './output')
   .option('--repo <owner/repo>', 'GitHub repo for Keystatic config (e.g. my-org/my-blog)')
-  .option('-t, --theme <id>', 'Astro theme (default: astrowind | scaffold for Keystatic-only | rocket|brook|daisyui|mainline|small-biz)', 'astrowind')
+  .option('-t, --theme <id>', 'Safe themes: astrowind (default) | scaffold; MDX-only/remote themes disabled', 'astrowind')
   .action(async (options) => {
     const { runMigrate } = await import('./commands/migrate.js')
     const { existsSync } = await import('node:fs')
@@ -49,7 +49,7 @@ program
 
 program
   .command('wp2md')
-  .description('Migrate WordPress export to Markdown using wordpress-export-to-markdown')
+  .description('Disabled raw converter; use migrate for bounded conversion (#24)')
   .requiredOption('-i, --input <path>', 'Path to WordPress XML export file')
   .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (enables local media serving)')
   .option('-o, --output <path>', 'Output directory', './output')

@@ -10,6 +10,7 @@ import type { WPDBData } from './db-reader.js'
  */
 export async function parseWPExport(xmlPath: string, dbData?: WPDBData): Promise<WPExport> {
   const xml = await readFile(xmlPath, 'utf-8')
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error('XML DTD/entities disabled')
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '_',
@@ -190,7 +191,7 @@ export async function parseWPExport(xmlPath: string, dbData?: WPDBData): Promise
 
 function decodeSlug(slug: string): string {
   try {
-    return decodeURIComponent(slug)
+    return decodeURIComponent(slug).normalize('NFC')
   } catch {
     return slug
   }

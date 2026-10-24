@@ -1,6 +1,11 @@
-import { readFile, writeFile } from 'fs/promises'
+import { readFile } from 'fs/promises'
+import { safeWriteFile, assertSafeTree } from '../input-boundary.js'
+import { dirname, basename } from 'node:path'
+const writeFile = async (path: string, data: string, _encoding: string) => safeWriteFile(dirname(path), basename(path), data)
 import { existsSync } from 'fs'
 import { join } from 'path'
+import matter from 'gray-matter'
+import { sourceString, htmlText, localHref } from './serialization.js'
 import type { ThemeAdapter, ArticleFM, PageFM, PatchConfigOpts, NavItem } from './types.js'
 
 /**
@@ -14,7 +19,7 @@ import type { ThemeAdapter, ArticleFM, PageFM, PatchConfigOpts, NavItem } from '
  * Bundled in bundled-themes/astrowind/ — copied locally, never downloaded at runtime.
  *
  * Content structure (Keystatic-compatible directory entries):
- *   src/data/post/<slug>/index.mdx  blog posts
+ *   src/data/post/<slug>/index.md  blog posts
  *   public/images/blog/             media
  */
 export const astrowindAdapter: ThemeAdapter = {
@@ -28,7 +33,7 @@ export const astrowindAdapter: ThemeAdapter = {
 
   contentDir: 'src/data/post',
   mediaDir: 'public/images/blog',
-  fileExt: 'mdx',
+  fileExt: 'md',
   useDirectoryEntries: true,
   sampleContentDirs: ['src/data/post'],
 
@@ -60,30 +65,23 @@ export const astrowindAdapter: ThemeAdapter = {
   },
 
   async patchConfig(outputDir: string, opts: PatchConfigOpts): Promise<void> {
+    await assertSafeTree(outputDir)
     // 1. Patch src/config.yaml — site name, description, URL
     const configYamlPath = join(outputDir, 'src', 'config.yaml')
     if (existsSync(configYamlPath)) {
-      let yaml = await readFile(configYamlPath, 'utf-8')
-
-      yaml = yaml.replace(
-        /(^|\n)(  name:\s*)(['"`]?)([^'"`\n]*)(\3)/,
-        (_m, pre, key, q, _old, qEnd) =>
-          `${pre}${key}${q || "'"}${opts.siteTitle}${qEnd || "'"}`,
-      )
-      if (opts.siteUrl) {
-        yaml = yaml.replace(
-          /(^|\n)(  site:\s*)(['"`])([^'"`\n]*)(\3)/,
-          (_m, pre, key, q, _old, qEnd) => `${pre}${key}${q}${opts.siteUrl}${qEnd}`,
-        )
-      }
-      yaml = yaml.replace(
-        /(^\s*default:\s*)(['"`]?)([^'"`\n]*)(\2)/m,
-        (_m, key, q, _old, qEnd) => `${key}${q || "'"}${opts.siteTitle}${qEnd || "'"}`,
-      )
-      yaml = yaml.replace(
-        /(description:\s*)(['"`"])([\s\S]*?)(\2)/,
-        (_m, key, q, _old, qEnd) => `${key}${q}${opts.siteDescription}${qEnd}`,
-      )
+      // Parse and reserialize the document: uploaded strings are YAML data,
+      // never source fragments (quotes, newlines, tags and anchors stay inert).
+      const original = await readFile(configYamlPath, 'utf-8')
+      const data = matter(`---\n${original}\n---\n`).data
+      data.site ??= {}
+      data.site.name = opts.siteTitle
+      if (opts.siteUrl) data.site.site = opts.siteUrl
+      data.metadata ??= {}
+      data.metadata.title ??= {}
+      data.metadata.title.default = opts.siteTitle
+      data.metadata.description = opts.siteDescription
+      // JSON is a YAML 1.2 document and avoids context-dependent quoting entirely.
+      const yaml = JSON.stringify(data, null, 2) + '\n'
       await writeFile(configYamlPath, yaml, 'utf-8')
     }
 
@@ -107,7 +105,7 @@ export const footerData = {
   socialLinks: [
     { ariaLabel: 'RSS', icon: 'tabler:rss', href: getAsset('/rss.xml') },
   ],
-  footNote: \`© \${new Date().getFullYear()} ${opts.siteTitle}. All rights reserved.\`,
+  footNote: \`© \${new Date().getFullYear()} \${${sourceString(htmlText(opts.siteTitle))}}. All rights reserved.\`,
 };
 `
       await writeFile(navPath, navContent, 'utf-8')
@@ -120,9 +118,9 @@ export const footerData = {
 
       if (opts.siteUrl) {
         if (/site:\s*['"`]/.test(cfg)) {
-          cfg = cfg.replace(/(site:\s*)(['"`])[^'"`]*\2/, `$1$2${opts.siteUrl}$2`)
+          cfg = cfg.replace(/(site:\s*)(['"`])[^'"`]*\2/, (_m, key) => `${key}${sourceString(opts.siteUrl)}`)
         } else {
-          cfg = cfg.replace('export default defineConfig({', `export default defineConfig({\n  site: '${opts.siteUrl}',`)
+          cfg = cfg.replace('export default defineConfig({', () => `export default defineConfig({\n  site: ${sourceString(opts.siteUrl)},`)
         }
       }
 
@@ -201,7 +199,7 @@ export default config({
         tags: fields.array(fields.text({ label: 'Tag' }), { label: 'Tags', itemLabel: (props) => props.fields.value.value }),
         author: fields.text({ label: 'Author' }),
         draft: fields.checkbox({ label: 'Draft', defaultValue: false }),
-        content: fields.mdx({ label: 'Content' }),
+        content: fields.markdoc({ label: 'Content', extension: 'md' }),
       },
     }),
   },
@@ -221,10 +219,10 @@ function serializeAstrowindLinks(navItems: NavItem[], indent = '    '): string {
   return items.map((item) => {
     if (item.children && item.children.length > 0) {
       const children = item.children
-        .map((c) => `${indent}    { text: ${JSON.stringify(c.label)}, href: getPermalink(${JSON.stringify(c.href)}) },`)
+        .map((c) => `${indent}    { text: ${JSON.stringify(c.label)}, href: getPermalink(${JSON.stringify(localHref(c.href))}) },`)
         .join('\n')
       return `${indent}{\n${indent}  text: ${JSON.stringify(item.label)},\n${indent}  links: [\n${children}\n${indent}  ],\n${indent}},`
     }
-    return `${indent}{ text: ${JSON.stringify(item.label)}, href: getPermalink(${JSON.stringify(item.href)}) },`
+    return `${indent}{ text: ${JSON.stringify(item.label)}, href: getPermalink(${JSON.stringify(localHref(item.href))}) },`
   }).join('\n') + '\n'
 }
