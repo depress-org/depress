@@ -33,7 +33,7 @@ export interface MigrateOptions {
 
 // ── Helper: resolve wp2md bin ─────────────────────────────────────────────────
 
-function resolveWp2mdBin(): string {
+export function resolveWp2mdBin(): string {
   const candidates = [
     fileURLToPath(new URL('../../../../../node_modules/wordpress-export-to-markdown/app.js', import.meta.url)),
     fileURLToPath(new URL('../../../../node_modules/wordpress-export-to-markdown/app.js', import.meta.url)),
@@ -462,7 +462,7 @@ export async function runMigrate(options: MigrateOptions) {
   }
 }
 
-async function resolveInput(input?: string): Promise<string | null> {
+export async function resolveInput(input?: string): Promise<string | null> {
   if (input) return resolve(input)
   for (const name of ['export.xml', 'wordpress.xml', 'wp-export.xml']) {
     try {
@@ -474,7 +474,7 @@ async function resolveInput(input?: string): Promise<string | null> {
   return null
 }
 
-async function writeTaxonomy(
+export async function writeTaxonomy(
   categories: Array<{ slug: string; name: string; description: string }>,
   tags: Array<{ slug: string; name: string }>,
   outputDir: string,
