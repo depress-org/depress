@@ -1,6 +1,6 @@
 # #24: converter and generated-source boundary
 
-Refs #24; built on merged #16 / PR28 (`d0865b0`). This is a scoped input-boundary patch, NOT approval for public/credentialed hosting.
+Refs #24; built on merged #16 / PR28 and reconciled with #23 / PR32 main (`692704a`). This is a scoped input-boundary patch, NOT approval for public/credentialed hosting.
 
 ## Policy and implementation
 
@@ -16,7 +16,7 @@ Refs #24; built on merged #16 / PR28 (`d0865b0`). This is a scoped input-boundar
 
 Node 20.20.2 / npm 10.8.2, root `npm ci --legacy-peer-deps`.
 
-- Root build, typecheck, lint; workspace test/coverage gates; security inventory regressions.
+- Root build, typecheck, lint; 270 workspace tests (CLI 82, job-core 32, web 63, engine 93), all four unchanged coverage gates, 5 security inventory regressions; negative 99% threshold probe correctly rejects the test command (configuration restored).
 - Mock resolver/transport tests only: private/mixed answers, encoded IPs, DNS rebinding/redirect revalidation, pinned address and TLS options, byte/aggregate/redirect/deadline bounds. No live private-host probes.
 - Actual shared service: traversal/encoding/collision rejection before output, symlink target untouched, local raster byte preservation and rewritten references, no missing-file network fallback, raw converter/MDX rejection.
 - Actual linked generated scaffold build with normal posts/pages/body/draft checks; second generated build with unusual uploaded titles and shortcode link/media regression; third real Astro build of AstroWind's raw-HTML footer sink. These are not cold-consumer security acceptance.
@@ -25,7 +25,7 @@ Node 20.20.2 / npm 10.8.2, root `npm ci --legacy-peer-deps`.
 ## Remaining gates / honest limitations
 
 - #25 owns the disposable-worker filesystem/network/process/CPU/memory/disk/log sandbox and credential separation. Node's portable pathname APIs do not provide descriptor-relative `openat2` containment: checks and `O_NOFOLLOW` mitigate pre-existing malicious paths, but cannot defend against a hostile concurrent process swapping ancestor directories. Run only in a private job-owned tree; no public-hosting safety claim until #25. Input/output roots are trusted service configuration, not user-selected upload fields.
-- #23 owns authentication, admission/body/resource limits, immutable owner scope and durable job storage. #22 owns archive extraction. Those are not duplicated here.
+- Integrated #23 / PR32 supplies authenticated scoped stores and admission/body/resource limits; its 32 job-core and 63 web tests pass on this branch. Immutable server-derived owner isolation is preserved, not reverted. #22 owns archive extraction. Those boundaries are not duplicated here.
 - #26 owns patched compatible toolchains and cold consumer acceptance. A real cold default AstroWind install succeeded, but the complete build FAILED on the bundled `homes/personal` demo's `RemoteImageNotAllowed` for an Unsplash image. Its consumer install reported 25 findings (6 moderate/18 high/1 critical), plus `undici@8.12.3` requiring Node >=22.19 on Node20. No package overrides, demo removal or toolchain upgrades were attempted in this card. Root install reported 17 findings (6 moderate/10 high/1 critical). These counts are snapshots, not exceptions or remediation claims.
 - Native conversion deliberately skips non-published content and does not promise byte-identical upstream conversion, all WordPress plugin fidelity, arbitrary media types or MDX themes. HTTP-only media must be supplied via the contained local-directory path or migrated to valid HTTPS. Incomplete/unsupported conversion rejects rather than reporting success.
-- No deployments, real credentials, production changes, paid services, registry publication or protected-branch merges were performed. Public/paid operation remains NO-GO pending #23–26 and #19 acceptance.
+- No deployments, real credentials, production changes, paid services, registry publication or protected-branch merges were performed. Public/paid operation remains NO-GO pending independent #24 review, #25–26 and #19 acceptance.
