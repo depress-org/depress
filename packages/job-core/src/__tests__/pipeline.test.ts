@@ -14,9 +14,9 @@ import { runJob, cleanupJob, isValidTheme } from '../pipeline.js'
 import { InMemoryJobStore } from '../types.js'
 const input = { wxrPath: 'fixture.xml', themeId: 'scaffold' }
 const deployment = { token: 'test', target: 'cloudflare-pages' as const, projectName: 'site' }
-let store: InMemoryJobStore
+let store: ReturnType<InMemoryJobStore['forOwner']>
 beforeEach(() => {
-  store = new InMemoryJobStore()
+  store = new InMemoryJobStore().forOwner('test-owner')
   migrate.mockReset().mockResolvedValue({})
   deploy.mockReset().mockImplementation(async (options) => {
     await options.onStage?.('building')
@@ -168,6 +168,14 @@ describe('shared job lifecycle #16', () => {
     })
     expect(result.status).toBe('failed')
   }, 1000)
+  it('foreign owner capability cannot run another owner job', async () => {
+    const root = new InMemoryJobStore()
+    const job = await root.forOwner('alice').create(input)
+    await expect(runJob(root.forOwner('bob'), job.id)).rejects.toThrow('Job not found')
+    expect(migrate).not.toHaveBeenCalled()
+    expect(deploy).not.toHaveBeenCalled()
+    expect((await root.forOwner('alice').get(job.id))?.status).toBe('queued')
+  })
   it('unknown job id rejects', async () => {
     await expect(runJob(store, 'missing')).rejects.toThrow('Job not found')
   })

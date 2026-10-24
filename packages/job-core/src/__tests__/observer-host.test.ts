@@ -8,7 +8,7 @@ describe('PR-02 #16 observer host survival on actual built library', () => {
     const script = `
       import { runJob } from ${JSON.stringify(pipeline)};
       import { InMemoryJobStore } from ${JSON.stringify(types)};
-      const store = new InMemoryJobStore();
+      const store = new InMemoryJobStore().forOwner('test-owner');
       const job = await store.create({wxrPath:'missing.xml',themeId:'invalid-theme'});
       const result = await runJob(store,job.id,{onProgress:async()=>{
         await new Promise(r=>setTimeout(r,10));
