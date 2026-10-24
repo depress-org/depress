@@ -43,10 +43,13 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: mkdir -p .tmp && npm ci --legacy-peer-deps
-      - name: Build migration packages
-        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress
+      - name: Build migration packages and both archive adapters (dependency order)
+        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress --workspace=@depress-org/job-core --workspace=@depress-org/telegram-bot --workspace=@depress-org/web
       - name: Migrate WXR and actually build generated Astro site
         run: npm run test:integration
+      - name: PR-08 archive via built web and bot, offline origin, reports and Astro builds
+        timeout-minutes: 15
+        run: npm run test:media-archive
       - name: Cold consumer install, actual build and unchanged-lock rebuild (no deploy)
         timeout-minutes: 15
         run: node scripts/cold-consumer.mjs

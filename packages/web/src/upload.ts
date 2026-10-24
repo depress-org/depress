@@ -6,7 +6,7 @@ export class UploadError extends Error {
 }
 export interface Upload { fields: Record<string, string>; files: Map<string, Buffer> }
 const fields = new Set(['theme', 'mode', 'deployTarget', 'projectName'])
-const files = new Set(['wxr', 'sql'])
+const files = new Set(['wxr', 'sql', 'media'])
 
 /** Streaming limits precede aggregation; never calls Request.formData/arrayBuffer. */
 export async function readUpload(request: Request, limits: Readonly<Limits>): Promise<Upload> {
@@ -24,7 +24,7 @@ export async function readUpload(request: Request, limits: Readonly<Limits>): Pr
     parser = busboy({ headers: { 'content-type': contentType }, limits: {
       // Busboy emits partsLimit when the count is reached (not exceeded).
       // Reserve one sentinel part; claim() rejects it before aggregation.
-      fileSize: limits.fileBytes + 1, files: 2, fields: 4, parts: 7,
+      fileSize: limits.fileBytes + 1, files: 3, fields: 4, parts: 8,
       fieldSize: 128, fieldNameSize: 32,
     } })
   } catch { throw new UploadError(400, 'Malformed multipart upload') }
@@ -44,7 +44,7 @@ export async function readUpload(request: Request, limits: Readonly<Limits>): Pr
   }
   let parts = 0
   const claim = (name: string, allowed: Set<string>) => {
-    if (++parts > 6) { fail(new UploadError(413, 'Too many upload parts')); return false }
+    if (++parts > 7) { fail(new UploadError(413, 'Too many upload parts')); return false }
     if (!allowed.has(name) || seen.has(name)) {
       fail(new UploadError(400, 'Unknown or duplicate upload field'))
       return false

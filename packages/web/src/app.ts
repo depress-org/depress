@@ -2,7 +2,7 @@
 import { Hono } from 'hono'
 import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { runJob, isValidTheme, listThemes, InMemoryJobStore, type Job, type JobInput } from '@depress-org/job-core'
+import { runJob, isValidTheme, listThemes, InMemoryJobStore, ingestMediaArchive, MediaArchiveError, validateSourceUpload, SourceUploadError, type Job, type JobInput } from '@depress-org/job-core'
 import { Admission, authenticator, resolveLimits, type Identity, type Limits } from './security.js'
 import { readUpload, UploadError } from './upload.js'
 
@@ -53,7 +53,7 @@ export function createApp(options: AppOptions = {}) {
     let handedOff = false
     try {
       const { fields, files } = await readUpload(c.req.raw, limits)
-      const wxr = files.get('wxr'), sql = files.get('sql')
+      const wxr = files.get('wxr'), sql = files.get('sql'), media = files.get('media')
       if (!wxr?.length) return c.json({ error: 'Nonempty wxr file is required' }, 400)
       if (!fields.theme || !isValidTheme(fields.theme)) return c.json({ error: 'Invalid theme' }, 400)
       if (fields.deployTarget !== undefined && !['cloudflare-pages', 'netlify', 'vercel'].includes(fields.deployTarget))
@@ -64,14 +64,17 @@ export function createApp(options: AppOptions = {}) {
         return c.json({ error: 'Invalid job mode' }, 400)
       // No HTTP credential/deployment opt-in until #25 provides a trusted worker boundary.
       if (fields.mode === 'deploy') return c.json({ error: 'HTTP deployment is disabled' }, 403)
+      validateSourceUpload(wxr, 'wxr')
+      if (sql) validateSourceUpload(sql, 'sql')
       await mkdir(uploadRoot, { recursive: true, mode: 0o700 })
       uploadDir = await mkdtemp(join(uploadRoot, 'upload-'))
+      const mediaDir = media ? (await ingestMediaArchive(media, uploadDir)).mediaDir : undefined
       const wxrPath = join(uploadDir, 'export.xml')
       await writeFile(wxrPath, wxr, { mode: 0o600, flag: 'wx' })
       const sqlDumpPath = sql ? join(uploadDir, 'dump.sql') : undefined
       if (sqlDumpPath) await writeFile(sqlDumpPath, sql!, { mode: 0o600, flag: 'wx' })
       const input: JobInput = {
-        wxrPath, sqlDumpPath, themeId: fields.theme, mode: 'migrate-only',
+        wxrPath, sqlDumpPath, mediaDir, themeId: fields.theme, mode: 'migrate-only',
         deployTarget: fields.deployTarget as JobInput['deployTarget'], projectName: fields.projectName,
       }
       const store = repository.forOwner(ownerId)
@@ -86,6 +89,7 @@ export function createApp(options: AppOptions = {}) {
       handedOff = true
       return c.json({ job: toPublicJob(job) }, 202)
     } catch (err) {
+      if (err instanceof MediaArchiveError || err instanceof SourceUploadError) return c.json({ error: err.message }, 400)
       if (err instanceof UploadError) return c.json({ error: err.message }, err.status)
       return c.json({ error: 'Job admission failed' }, 500)
     } finally {
