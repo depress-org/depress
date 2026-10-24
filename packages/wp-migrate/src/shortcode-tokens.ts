@@ -44,7 +44,9 @@ export function scanShortcodes(content: string, sourceKey: string): ShortcodeTok
       if (quote) { if (ch === quote) quote = '' }
       else if (ch === '"' || ch === "'") quote = ch
       else if (ch === ']') break
-      else if (ch === '[' || ch === '\n' || ch === '\r') break
+      // Newlines are legal attribute whitespace. Own a balanced multiline
+      // boundary in full; never leave its attribute tail with ordinary prose.
+      else if (ch === '[' || ch === '<') break
     }
     if (content[end] !== ']' || quote) {
       // Keep stable private evidence for an unterminated candidate. Mask only
