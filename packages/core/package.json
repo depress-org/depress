@@ -13,6 +13,9 @@
   },
   "files": [
     "dist",
+    "!dist/**/__tests__/**",
+    "!dist/**/__fixtures__/**",
+    "!dist/**/*.test.*",
     "README.md"
   ],
   "publishConfig": {

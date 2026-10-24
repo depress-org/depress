@@ -13,7 +13,21 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "!dist/**/__tests__/**",
+    "!dist/**/__fixtures__/**",
+    "!dist/**/*.test.*",
+    "README.md",
+    "bundled-themes/astrowind/LICENSE.md",
+    "bundled-themes/astrowind/README.md",
+    "bundled-themes/astrowind/package.json",
+    "bundled-themes/astrowind/astro.config.ts",
+    "bundled-themes/astrowind/tailwind.config.js",
+    "bundled-themes/astrowind/tsconfig.json",
+    "bundled-themes/astrowind/src",
+    "!bundled-themes/astrowind/src/data/**",
+    "bundled-themes/astrowind/vendor/integration",
+    "bundled-themes/astrowind/public/robots.txt",
+    "bundled-themes/astrowind/public/_headers"
   ],
   "publishConfig": {
     "access": "public"
@@ -28,7 +42,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@depress-org/core": "*",
+    "@depress-org/core": "^0.1.0",
     "@markdoc/markdoc": "0.4.0",
     "chalk": "^5.0.0",
     "fast-xml-parser": "^4.0.0",
