@@ -21,7 +21,9 @@ export interface JobInput {
   mediaDir?: string
   /** Theme adapter id from @depress-org/wp-migrate's theme registry. */
   themeId: string
-  /** Deploy target — defaults to cloudflare-pages per architecture decision. */
+  /** Deployment is opt-in via mode AND server-side RunJobOptions.deployment. */
+  mode?: 'migrate-only' | 'deploy'
+  /** Optional target must match server-side deployment config. */
   deployTarget?: DeployTargetId
   /** Deploy project name, if the user wants one. */
   projectName?: string
