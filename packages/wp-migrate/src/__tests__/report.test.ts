@@ -176,9 +176,9 @@ describe('source inventory and migration reports', () => {
       await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\nextra: "![Second context](/media/photo.jpg)"\n---\n${body}`)
       expect(codes(await inspectMigration(d, m, layout))).toContain('inline-alt-mismatch')
     }
-    for (const body of ['![First context](/media/photo.jpg)\n![Second context](/media/photo.jpg)', '<img src="/media/photo.jpg" alt="First context"><img alt="Second context" src="/media/photo.jpg">']) {
+    for (const body of ['![First context](/media/photo.jpg)\n![Second context](/media/photo.jpg)', '<!-- ![First context](/media/photo.jpg) -->\n![Second context](/media/photo.jpg)']) {
       await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
-      // HTML image alt does not contribute to prose, just like Markdown alt.
+      // Positive evidence must be an actual image in the Markdoc renderer.
       expect((await writeMigrationReports(d, m, layout)).qualityPassed).toBe(true)
       expect((await validateMigrationReport(d)).passed).toBe(true)
     }
@@ -193,6 +193,25 @@ describe('source inventory and migration reports', () => {
       const r = await inspectMigration(d, m, layout)
       expect(r.items[0].findings.map(f => f.code)).toContain('inline-alt-mismatch')
     }
+  })
+  it.each([
+    '<!-- <img src="/media/photo.jpg" alt="Exact"> -->\n![](/media/photo.jpg)',
+    '\\![Exact](/media/photo.jpg)\n![](/media/photo.jpg)',
+    '<img src="/media/photo.jpg" alt="Exact">',
+    '``![Exact](/media/photo.jpg)``\n![](/media/photo.jpg)',
+    '~~~md\n![Exact](/media/photo.jpg)\n~~~\n![](/media/photo.jpg)',
+    '{% if false %}\n![Exact](/media/photo.jpg)\n{% /if %}\n![](/media/photo.jpg)',
+    '{% comment %}\n![Exact](/media/photo.jpg)\n{% /comment %}\n![](/media/photo.jpg)',
+  ])('rejects nonrendered or unproven Markdoc image evidence: %s', async body => {
+    const d = await temp(); await good(d)
+    const m = manifest(item(1, 'post', 'hello', 'publish', '', '<img src="https://old.test/photo.jpg" alt="Exact">') + item(8, 'attachment', 'photo', 'inherit', '<wp:attachment_url>https://old.test/photo.jpg</wp:attachment_url>' + meta('_wp_attachment_image_alt', 'Exact')))
+    await put(d, 'public/media/photo.jpg', 'bytes')
+    await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
+    const r = await writeMigrationReports(d, m, layout)
+    expect(codes(r)).toContain('inline-alt-mismatch')
+    expect(r.media[0].findings.map(f => f.code)).toContain('unsupported-alt')
+    expect(r.qualityPassed).toBe(false)
+    expect((await validateMigrationReport(d)).passed).toBe(false)
   })
   it('rejects empty attachments instead of treating their empty hash as migration evidence', async () => {
     const d = await temp(); await good(d)

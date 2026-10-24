@@ -4,6 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 import matter from 'gray-matter'
 import TurndownService from 'turndown'
+import Markdoc from '@markdoc/markdoc'
 import { proveScaffoldDraftExclusion } from './report-privacy.js'
 import type { WPExport, SourceManifest, SourceItem, ReportLayout, MigrationReportV1, MigrationItem, MigrationMedia, ReportFinding } from '@depress-org/core'
 
@@ -88,24 +89,37 @@ const markdownText = (value: string) => value.replace(/<img\b(?:[^"'<>]|"[^"]*"|
 const sourceText = (value: string) => markdownText(new TurndownService().turndown(value))
 const finding = (findings: ReportFinding[], code: string, detail: string) => findings.push({ code, detail })
 
-// Conservative image syntax reader. Unknown syntax cannot prove preservation.
-// Drop fenced/inline code so a literal example is never accepted as an image.
-function images(value: string, htmlOnly = false): Array<{ src: string; alt: string }> {
-  const unescape = (s: string) => s.replace(/\\([\\\[\]])/g, '$1').replace(/&(?:amp|quot|apos|lt|gt);|&#(?:x[\da-f]+|\d+);/gi, entity => {
-    const named: Record<string, string> = { '&amp;': '&', '&quot;': '"', '&apos;': "'", '&lt;': '<', '&gt;': '>' }
-    if (named[entity.toLowerCase()]) return named[entity.toLowerCase()]
-    const hex = entity[2].toLowerCase() === 'x'
-    const point = Number.parseInt(entity.slice(hex ? 3 : 2, -1), hex ? 16 : 10)
-    return point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : entity
+type ImageEvidence = { src: string; alt: string }
+
+// Source is HTML: inspect parsed elements, not commented/escaped example text.
+// Turndown already owns source HTML parsing; never execute source or custom tags.
+function sourceImages(value: string): ImageEvidence[] {
+  const found: ImageEvidence[] = []
+  const html = new TurndownService()
+  html.addRule('report-images', {
+    filter: 'img',
+    replacement: (_content, node) => {
+      const src = node.getAttribute('src')
+      if (src) found.push({ src, alt: node.getAttribute('alt') ?? '' })
+      return ''
+    },
   })
-  const input = htmlOnly ? value : value.replace(/```[^]*?```|~~~[^]*?~~~|`[^`\r\n]*`/g, '')
-  const found: Array<{ index: number; src: string; alt: string }> = []
-  for (const m of input.matchAll(/<img\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi)) {
-    const attrs = Object.fromEntries([...m[0].matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)].map(a => [a[1].toLowerCase(), unescape(a[2] ?? a[3] ?? a[4])]))
-    if (attrs.src) found.push({ index: m.index!, src: attrs.src, alt: attrs.alt ?? '' })
-  }
-  if (!htmlOnly) for (const m of input.matchAll(/!\[((?:\\.|[^\]\\])*)\]\(([^\s)]+)(?:\s+[^)]*)?\)/g)) found.push({ index: m.index!, src: m[2], alt: unescape(m[1]) })
-  return found.sort((a, b) => a.index - b.index)
+  html.turndown(value)
+  return found
+}
+
+// Parse the same Markdoc grammar as the generated .mdoc renderer. HTML is text
+// there, and escaped Markdown/code/comments must never supply image evidence.
+// No transform/resolve: dynamic tags/annotations/custom formats are unproven.
+function images(value: string, fileExt: string): ImageEvidence[] {
+  if (fileExt !== 'mdoc') return []
+  try {
+    const nodes = [...Markdoc.parse(value).walk()]
+    if (nodes.some(node => node.type === 'tag' || node.errors.length || node.annotations.length)) return []
+    return nodes.filter(node => node.type === 'image')
+      .filter(node => typeof node.attributes.src === 'string' && typeof node.attributes.alt === 'string')
+      .map(node => ({ src: node.attributes.src, alt: node.attributes.alt }))
+  } catch { return [] }
 }
 
 /** Inspect actual bytes, not transform counters. No source content is executed. */
@@ -189,9 +203,9 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
       if (matches.length !== 1) finding(item.findings, 'missing-featured-attachment', `Featured attachment ${source.featuredImageId} missing or ambiguous`)
       else if (!raw.includes(`/media/${basename(matches[0].url)}`)) finding(item.findings, 'featured-image-mismatch', `Featured attachment ${source.featuredImageId} is not referenced locally`)
     }
-    const actualImages = images(body)
+    const actualImages = images(body, layout.fileExt)
     const occurrences = new Map<string, number>()
-    for (const image of images(source.content, true)) {
+    for (const image of sourceImages(source.content)) {
       const local = `/media/${basename(image.src)}`
       const index = occurrences.get(local) ?? 0
       occurrences.set(local, index + 1)
@@ -213,7 +227,7 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
     catch (error) { finding(entry.findings, error instanceof UnsafePath ? 'unsafe-path' : 'missing-media', `Attachment ${source.id} local file is unavailable`) }
     if (source.altText) {
       const local = `/media/${name}`
-      const preserved = [...output.values()].some(body => images(body).some(image => image.src === local && image.alt === source.altText))
+      const preserved = [...output.values()].some(body => images(body, layout.fileExt).some(image => image.src === local && image.alt === source.altText))
       if (!preserved) finding(entry.findings, 'unsupported-alt', `Source alt for attachment ${source.id} is not proven preserved on a local image`)
     }
     entry.status = entry.findings.length ? (entry.findings.every(f => f.code === 'unsupported-alt') ? 'unsupported' : 'failed') : 'migrated'

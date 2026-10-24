@@ -1,3 +1,4 @@
+import { verifyGeneratedImageEvidence } from './generated-image-evidence.mjs'
 import assert from 'node:assert/strict'
 import { validateMigrationReport, writeMigrationReports } from '../packages/wp-migrate/dist/index.js'
 import { execFileSync } from 'node:child_process'
@@ -73,4 +74,5 @@ assert.equal((await validateMigrationReport(site)).passed, true)
 for (const slug of ['secret-draft', 'secret-private']) assert(!existsSync(join(site, 'dist/blog', slug, 'index.html')))
 assert(!readFileSync(join(site, 'dist/blog/index.html'), 'utf8').includes('Secret fixture draft'))
 console.log('Actual built draft/private publication negatives and changed-reader rejection passed')
+await verifyGeneratedImageEvidence(root, site, report.layout)
 console.log(`Generated fixture build and rendered body/draft checks passed: ${site}`)
