@@ -79,3 +79,29 @@ jobs:
       - run: npm run build && npm run typecheck && npm test
       - name: Cold scaffold and complete default theme, CMS/media/runtime/audits and unchanged-lock rebuilds
         run: node scripts/cold-consumer.mjs && node scripts/default-consumer.mjs
+
+  oss-packaging:
+    name: OSS packaging and scaffold consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps
+      - name: Build the three public packages
+        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress
+      - name: Real installed CLI and library; default build is measured NO-GO under issue 26
+        run: npm run test:oss-packaging
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oss-packaging-evidence
+          include-hidden-files: true
+          path: |
+            .tmp/oss-consumer-*/result.json
+            .tmp/oss-consumer-*/*.log
