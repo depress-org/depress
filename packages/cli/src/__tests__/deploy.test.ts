@@ -1,95 +1,169 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { resolve, join } from 'node:path'
 import {
   runDeploy,
   extractDeployedUrl,
-  deployToCloudflarePages,
-  type SpawnFn,
-  type SpawnResult,
+  buildSite,
+  validateDeployOptions,
 } from '../commands/deploy.js'
+import { defaultSpawn, safeEnvironment } from '../services/process.js'
 
-function mockSpawn(responses: SpawnResult[]): SpawnFn {
-  let i = 0
+let dir: string
+beforeEach(async () => {
+  await mkdir('.tmp', { recursive: true })
+  dir = await mkdtemp(resolve('.tmp/deploy-test-'))
+  await mkdir(join(dir, 'dist'))
+  await writeFile(join(dir, 'dist/index.html'), 'static fixture')
+})
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true })
+})
+const ok = { code: 0, stdout: '', stderr: '' }
+function mockSpawn(failAt = -1, noUrl = false) {
+  let n = 0
   return vi.fn(async () => {
-    const r = responses[Math.min(i, responses.length - 1)]
-    i += 1
-    return r
+    n++
+    if (n === failAt)
+      return {
+        code: 1,
+        stdout: 'secret-provider-output',
+        stderr: 'secret-token',
+      }
+    return {
+      ...ok,
+      stdout: n === 4 && !noUrl ? 'Deployed to https://site.pages.dev' : '',
+    }
   })
 }
-
-describe('extractDeployedUrl', () => {
-  it('extracts a pages.dev URL from wrangler output', () => {
-    const stdout = 'Deployed to https://my-site.pages.dev\nDone.'
-    expect(extractDeployedUrl('cloudflare-pages', stdout)).toBe('https://my-site.pages.dev')
+describe('typed deploy service', () => {
+  it.each([
+    'https://x.pages.dev.attacker.test',
+    'https://x.pages.dev@attacker.test',
+    'https://x.pages.dev:1234',
+  ])('rejects invalid URL %s', (url) => {
+    expect(extractDeployedUrl('cloudflare-pages', url)).toBeNull()
   })
-
-  it('returns null when no URL is present', () => {
-    expect(extractDeployedUrl('cloudflare-pages', 'no url here')).toBeNull()
-  })
-
-  it('extracts a netlify URL', () => {
-    expect(extractDeployedUrl('netlify', 'Live: https://foo.netlify.app')).toBe('https://foo.netlify.app')
-  })
-
-  it('extracts a vercel URL', () => {
-    expect(extractDeployedUrl('vercel', 'https://foo.vercel.app ready')).toBe('https://foo.vercel.app')
-  })
-})
-
-describe('deployToCloudflarePages', () => {
-  it('invokes wrangler pages deploy via npx with the token in env', async () => {
-    const spawnFn = mockSpawn([{ code: 0, stdout: 'https://x.pages.dev', stderr: '' }])
-    await deployToCloudflarePages('/tmp/site', { token: 'secret-token', projectName: 'my-site' }, spawnFn)
-    expect(spawnFn).toHaveBeenCalledWith(
-      'npx',
-      ['wrangler', 'pages', 'deploy', 'dist', '--project-name', 'my-site'],
-      expect.objectContaining({ cwd: '/tmp/site', env: expect.objectContaining({ CLOUDFLARE_API_TOKEN: 'secret-token' }) }),
-    )
-  })
-})
-
-describe('runDeploy', () => {
-  const originalEnv = { ...process.env }
-
-  beforeEach(() => {
-    process.env = { ...originalEnv }
-    delete process.env.CLOUDFLARE_API_TOKEN
-    delete process.env.NETLIFY_AUTH_TOKEN
-    delete process.env.VERCEL_TOKEN
-  })
-
-  afterEach(() => {
-    process.env = { ...originalEnv }
-    process.exitCode = 0
-  })
-
-  it('fails fast when no token is available', async () => {
-    const spawnFn = mockSpawn([{ code: 0, stdout: '', stderr: '' }])
-    await runDeploy({ dir: process.cwd(), target: 'cloudflare-pages' }, spawnFn)
-    expect(process.exitCode).toBe(1)
-    expect(spawnFn).not.toHaveBeenCalled()
-  })
-
-  it('builds then deploys and reports the URL on success', async () => {
-    const spawnFn = mockSpawn([
-      { code: 0, stdout: 'build ok', stderr: '' },
-      { code: 0, stdout: 'Deployed to https://my-site.pages.dev', stderr: '' },
+  it.each(['netlify', 'vercel', 'bad'])(
+    'fails closed on unsupported/untrusted target %s',
+    (target) => {
+      expect(() =>
+        validateDeployOptions({ target: target as any, token: 'test' }),
+      ).toThrow()
+    },
+  )
+  it('returns URL only after lock/install/build/deploy, without leaking credentials', async () => {
+    const spawn = mockSpawn()
+    const before = process.exitCode
+    await expect(
+      runDeploy({ dir, token: 'secret-token', projectName: 'site' }, spawn),
+    ).resolves.toEqual({
+      target: 'cloudflare-pages',
+      deployUrl: 'https://site.pages.dev',
+    })
+    expect(process.exitCode).toBe(before)
+    expect(spawn.mock.calls).toHaveLength(4)
+    const calls = (spawn as any).mock.calls
+    expect(calls[0][1]).toContain('--package-lock-only')
+    expect(calls[1][1]).toEqual([
+      'ci',
+      '--ignore-scripts',
+      '--legacy-peer-deps',
     ])
-    await runDeploy({ dir: process.cwd(), target: 'cloudflare-pages', token: 'tok' }, spawnFn)
-    expect(process.exitCode).not.toBe(1)
-    expect(spawnFn).toHaveBeenCalledTimes(2)
+    expect(calls[2][1]).toEqual(['run', 'build'])
+    // Real cold Keystatic build exhausts 512 MiB; build-only policy stays bounded.
+    expect(calls[2][2].env.NODE_OPTIONS).toBe('--max-old-space-size=1024')
+    expect(calls[0][2].env.NODE_OPTIONS).toBe('--max-old-space-size=512')
+    for (const call of calls.slice(0, 3)) {
+      expect(call[2].env).not.toHaveProperty('CLOUDFLARE_API_TOKEN')
+      expect(JSON.stringify(call)).not.toContain('secret-token')
+    }
+    expect(calls[3][0]).toBe(process.execPath)
+    expect(calls[3][1].join(' ')).not.toContain('secret-token')
+    expect(calls[3][2].cwd).not.toBe(dir)
+    expect(calls[3][2].env.CLOUDFLARE_API_TOKEN).toBe('secret-token')
   })
-
-  it('stops and fails when the build step fails', async () => {
-    const spawnFn = mockSpawn([{ code: 1, stdout: '', stderr: 'build broke' }])
-    await runDeploy({ dir: process.cwd(), target: 'cloudflare-pages', token: 'tok' }, spawnFn)
-    expect(process.exitCode).toBe(1)
-    expect(spawnFn).toHaveBeenCalledTimes(1)
+  it.each([1, 2, 3, 4])(
+    'rejects failure at stage %s without raw output or host exit changes',
+    async (stage) => {
+      const before = process.exitCode
+      const spawn = mockSpawn(stage)
+      await expect(
+        runDeploy({ dir, token: 'secret-token', projectName: 'site' }, spawn),
+      ).rejects.toThrow(/failed/i)
+      expect(process.exitCode).toBe(before)
+      expect(spawn).toHaveBeenCalledTimes(stage)
+    },
+  )
+  it('rejects zero-exit deploy without URL', async () => {
+    await expect(
+      runDeploy({ dir, token: 'secret-token', projectName: 'site' }, mockSpawn(-1, true)),
+    ).rejects.toThrow(/valid URL/)
   })
-
-  it('fails when the directory does not exist', async () => {
-    const spawnFn = mockSpawn([{ code: 0, stdout: '', stderr: '' }])
-    await runDeploy({ dir: '/no/such/dir/depress-test', target: 'cloudflare-pages', token: 'tok' }, spawnFn)
-    expect(process.exitCode).toBe(1)
-    expect(spawnFn).not.toHaveBeenCalled()
+  it('uses an existing lock without resolving dependencies again', async () => {
+    await writeFile(join(dir, 'package-lock.json'), '{}')
+    const spawn = vi.fn(async () => ok)
+    await buildSite(dir, spawn)
+    expect(spawn).toHaveBeenCalledTimes(2)
+  })
+  it('allowlist excludes ambient secret/config injection', () => {
+    const env = safeEnvironment(dir)
+    expect(Object.keys(env)).not.toContain('CLOUDFLARE_API_TOKEN')
+    expect(env.NODE_OPTIONS).toBe('--max-old-space-size=512')
+    expect(env.npm_config_userconfig).toBe(`${dir}/user.npmrc`)
+  })
+})
+describe('bounded subprocesses', () => {
+  it('times out a real child', async () => {
+    await expect(
+      defaultSpawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {
+        cwd: dir,
+        env: {},
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow(/timed out/)
+  })
+  it('kills over-producing children', async () => {
+    await expect(
+      defaultSpawn(
+        process.execPath,
+        ['-e', 'process.stdout.write("x".repeat(10000))'],
+        { cwd: dir, env: {}, maxOutputBytes: 100 },
+      ),
+    ).rejects.toThrow(/output limit/)
+  })
+  it('limits concurrent real children to two', async () => {
+    const script =
+      'const a=Date.now();setTimeout(()=>console.log(JSON.stringify([a,Date.now()])),150)'
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        defaultSpawn(process.execPath, ['-e', script], { cwd: dir, env: {} }),
+      ),
+    )
+    const events = results
+      .flatMap((r) => {
+        const [a, b] = JSON.parse(r.stdout)
+        return [
+          [a, 1],
+          [b, -1],
+        ]
+      })
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    let active = 0,
+      peak = 0
+    for (const [, change] of events) {
+      active += change
+      peak = Math.max(peak, active)
+    }
+    expect(peak).toBeLessThanOrEqual(2)
+    expect(peak).toBe(2)
+  })
+  it('does not print argv or environment when executable is missing', async () => {
+    await expect(
+      defaultSpawn('/no/such/secret-token', ['secret-token'], {
+        cwd: dir,
+        env: {},
+      }),
+    ).rejects.toThrow('Could not start child process')
   })
 })

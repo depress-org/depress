@@ -39,7 +39,8 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "wordpress",
@@ -69,6 +70,7 @@
     "@depress-org/wp-migrate": "*",
     "chalk": "^5.0.0",
     "commander": "^12.0.0",
+    "fast-xml-parser": "^4.5.7",
     "gray-matter": "^4.0.0",
     "inquirer": "^9.0.0",
     "ora": "^8.0.0",
@@ -78,8 +80,9 @@
   "devDependencies": {
     "@types/inquirer": "^9.0.0",
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "4.1.12",
     "typescript": "^5.4.0",
-    "vitest": "^4.1.5"
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": ">=18.0.0",
