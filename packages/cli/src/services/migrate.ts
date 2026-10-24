@@ -27,7 +27,7 @@ export interface MigrateOptions {
   overwrite?: boolean
 }
 // ── Helper: resolve wp2md bin ─────────────────────────────────────────────────
-function resolveWp2mdBin(): string {
+export function resolveWp2mdBin(): string {
   return createRequire(import.meta.url).resolve(
     'wordpress-export-to-markdown/app.js',
   )
@@ -464,7 +464,7 @@ async function migrate(options: MigrateOptions) {
   }
 }
 
-async function resolveInput(input?: string): Promise<string | null> {
+export async function resolveInput(input?: string): Promise<string | null> {
   if (input) return resolve(input)
   for (const name of ['export.xml', 'wordpress.xml', 'wp-export.xml']) {
     try {
@@ -477,7 +477,7 @@ async function resolveInput(input?: string): Promise<string | null> {
   }
   return null
 }
-async function writeTaxonomy(
+export async function writeTaxonomy(
   categories: Array<{
     slug: string
     name: string

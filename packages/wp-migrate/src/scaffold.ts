@@ -44,7 +44,7 @@ function genPackageJson(siteTitle: string): string {
         '@astrojs/cloudflare': '^10.0.0',
         '@astrojs/markdoc': '^0.11.0',
         '@astrojs/react': '^3.6.0',
-        '@astrojs/sitemap': '^3.0.0',
+        '@astrojs/sitemap': '3.2.1',
         '@astrojs/tailwind': '^5.1.0',
         '@keystatic/astro': '^5.0.0',
         '@keystatic/core': '^0.5.0',
@@ -53,6 +53,7 @@ function genPackageJson(siteTitle: string): string {
         'react-dom': '^18.3.1',
         sharp: '^0.33.4',
         tailwindcss: '^3.4.1',
+        yaml: '^2.6.0',
       },
       devDependencies: {
         '@types/react': '^18.3.0',
@@ -74,6 +75,27 @@ import sitemap from '@astrojs/sitemap'
 import markdoc from '@astrojs/markdoc'
 import keystatic from '@keystatic/astro'
 
+// Astro 4 + Cloudflare's manual chunk split otherwise creates an ESM TDZ
+// between Astro core and the React renderer while retrieving the manifest.
+function fixCircularAstroChunks() {
+  return {
+    name: 'fix-circular-astro-chunks',
+    enforce: 'post',
+    outputOptions(options) {
+      const prev = options.manualChunks
+      return {
+        ...options,
+        manualChunks(id, api) {
+          if (['astro', '@astrojs/react', 'react', 'react-dom'].some(
+            (name) => id.includes('node_modules/' + name + '/'),
+          )) return 'astro-react-vendor'
+          if (typeof prev === 'function') return prev(id, api)
+        },
+      }
+    },
+  }
+}
+
 export default defineConfig({
   output: 'hybrid',
   adapter: cloudflare(),
@@ -85,6 +107,7 @@ export default defineConfig({
     markdoc(),
     keystatic(),
   ],
+  vite: { plugins: [fixCircularAstroChunks()] },
 })
 `
 }
@@ -667,13 +690,13 @@ const formattedDate = publishedAt
 function genIndexPage(siteTitle: string, siteDescription: string): string {
   return `---
 import { getCollection, getEntry } from 'astro:content'
-import { createReader } from '@keystatic/core/reader'
-import keystaticConfig from '../../keystatic.config'
+import { parse } from 'yaml'
+import siteConfigYaml from '../../site-config.yaml?raw'
 import BaseLayout from '../layouts/BaseLayout.astro'
 import ArticleCard from '../components/ui/ArticleCard.astro'
 
-const reader = createReader(process.cwd(), keystaticConfig)
-const siteConfigData = await reader.singletons.siteConfig.read()
+// Bundle CMS settings at build time; filesystem reader cannot run on Workers.
+const siteConfigData = parse(siteConfigYaml)
 
 const homepageType = siteConfigData?.homepageType ?? 'latest_posts'
 const homepageRef = siteConfigData?.homepageRef ?? ''
