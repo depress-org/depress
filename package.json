@@ -11,9 +11,11 @@
     "build": "npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress --if-present && npm run build --workspaces --if-present",
     "dev": "npm run dev --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test:coverage --workspaces --if-present",
+    "test": "node scripts/test-workspaces.mjs",
     "test:unit": "npm run test --workspaces --if-present",
-    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "test:coverage": "npm test",
+    "test:integration": "node scripts/generated-site.mjs",
+    "test:gate": "node scripts/verify-coverage-gate.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clean": "find . -name 'dist' -type d -not -path '*/node_modules/*' | xargs rm -rf"
   },
@@ -22,7 +24,10 @@
     "npm": ">=9.0.0"
   },
   "devDependencies": {
+    "@astrojs/sitemap": "3.2.1",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "4.1.12",
     "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "vitest": "4.1.12"
   }
 }

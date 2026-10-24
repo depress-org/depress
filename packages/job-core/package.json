@@ -11,13 +11,17 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "license": "MIT",
   "dependencies": {
@@ -27,13 +31,16 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "4.1.12",
     "typescript": "^5.4.0",
-    "vitest": "^4.1.5"
+    "vitest": "4.1.12"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/depress-org/depress.git",
     "directory": "packages/job-core"
   },
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
