@@ -27,6 +27,7 @@ program
   .option('-d, --wp-dir <path>', 'Path to WordPress public_html directory (contained local raster copies; no network fallback)')
   .option('--db <path>', 'WordPress MySQL dump (.sql) — enables Yoast SEO, ACF fields, author profiles')
   .option('-o, --output <path>', 'Output directory', './output')
+  .option('--static-plugins <path>', 'Path to strict static-plugin v1 JSON config (reviewed in-tree IDs only)')
   .option('--repo <owner/repo>', 'GitHub repo for Keystatic config (e.g. my-org/my-blog)')
   .option('-t, --theme <id>', 'Safe themes: astrowind (default) | scaffold; MDX-only/remote themes disabled', 'astrowind')
   .action(async (options) => {
@@ -43,7 +44,15 @@ program
       if (!overwrite) return
       options.overwrite = true
     }
+    if (options.staticPlugins) {
+      const { readFile, stat } = await import('node:fs/promises')
+      try {
+        if ((await stat(options.staticPlugins)).size > 1_048_576) throw new Error('PLUGIN_CONFIG_INVALID')
+        options.staticPlugins = JSON.parse(await readFile(options.staticPlugins, 'utf8'))
+      } catch { options.staticPlugins = null } // canonical service report, no raw file/error disclosure
+    }
     const result = await runMigrate(options)
+    if (!result.qualityPassed) { console.error('Migration needs review; see migration-report.json and migration-report.md'); process.exitCode = 1; return }
     console.log(`Migration complete: ${result.outputDir}`)
   })
 
