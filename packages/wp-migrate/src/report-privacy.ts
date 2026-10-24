@@ -14,11 +14,12 @@ export async function proveScaffoldDraftExclusion(
   const yaml = (await read('site-config.yaml')).toString('utf8')
   const settings = matter(`---\n${yaml}\n---`, { engines: { javascript: () => { throw new Error('Executable settings') } } }).data
   const config = (await read('astro.config.mjs')).toString('utf8')
-  const siteUrl = config.match(/^  site: '([^'\r\n]*)',$/m)?.[1]
+  // Read only the canonical JSON string literal as data. Never evaluate source;
+  // the entire executable file still has to match scaffoldFiles byte-for-byte.
+  const literal = config.match(/^  site: ("(?:[^"\\\r\n]|\\.)*"),$/m)?.[1]
+  const siteUrl: unknown = literal === undefined ? undefined : JSON.parse(literal)
   const { siteTitle, siteDescription } = settings
-  // Scaffold interpolates these literals: do not allow interpolation to smuggle code
-  // into what is being treated as a known, nonpublic reader. #24 owns escaping.
-  if ([siteTitle, siteDescription, siteUrl].some(v => typeof v !== 'string' || /['"`$<>{}\\\r\n]/.test(v))) throw new Error('Unproven scaffold literals')
+  if (typeof siteTitle !== 'string' || typeof siteDescription !== 'string' || typeof siteUrl !== 'string') throw new Error('Unproven scaffold literals')
   const actual = new Map<string, Buffer>()
   const walk = async (path: string): Promise<void> => {
     for (const entry of await readdir(await directory(path), { withFileTypes: true })) {

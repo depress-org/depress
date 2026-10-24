@@ -1,0 +1,62 @@
+# #24: converter and generated-source boundary
+
+Refs #24; built on merged #16 / PR28 and reconciled with #23 / PR32 main (`692704a`). This is a scoped input-boundary patch, NOT approval for public/credentialed hosting.
+
+## Policy and implementation
+
+- The shared migration service no longer passes WXR to `wordpress-export-to-markdown`. Its writer's path decoding and unbounded Axios buffering cannot be made safe with post-conversion checks or CLI flags. `convertSafeExport` uses the existing native parser/Turndown transformer instead. The raw `wp2md` command fails closed with a typed error. The installed upstream dependency/resolver remain for compatibility/inventory only; no migration path executes it. No new dependencies or lockfile changes.
+- Slugs, taxonomy names used as paths, attachment filenames, and referenced media path components must be single nonempty NFC-normalized Unicode letter/number/underscore/hyphen-led segments, at most 180 UTF-8 bytes. Remaining percent escapes, separators, dot traversal, controls, spaces, terminal dots/spaces, Windows device names are rejected. Duplicate/case-fold/NFC collisions are rejected, not overwritten or silently renamed. Media flattening requires unique filenames across all referenced URLs. Parser and navigation canonicalize decoded slugs to NFC.
+- Validate all export paths before conversion; check original media paths before WHATWG URL removes dot components. Check existing source/output ancestors and realpath containment; reject symlinks, hardlinks, special files and case/NFC aliases. Safe writes recheck ancestors and open final files with `O_NOFOLLOW|O_NONBLOCK`, verify a regular single-link file before truncation. Local raster reads are capped even if files grow after stat. No loopback file server or network fallback in local WordPress-directory mode.
+- Referenced `<img>` and cover images only: remote fetches require credential-free HTTPS/443, strict certificate verification and original hostname/SNI. Every DNS answer must be public; requests connect to a pinned validated answer without a second DNS resolution, global agent, environment proxy or automatic redirects. IPv4 private/shared/loopback/link-local/documentation/multicast/reserved and non-global/special IPv6 are denied. The IPv6 policy is deliberately conservative. Each redirect repeats URL and DNS checks. Compressed responses are rejected.
+- `MEDIA_LIMITS` defines maximum 128 referenced images, 8 MiB per response/local file, 64 MiB migration aggregate, 3 redirects, 15 s per request including DNS/body/redirects and 60 s across migration media. Stream counting precedes buffering; local reads also have a fixed cap. Only PNG/JPEG/GIF/WebP signatures matching filename extensions enter public artifacts; this is a format allowlist, NOT a claim of malware-free images. No remote theme downloader is available.
+- Untrusted content is plain Markdown/Markdoc, never MDX. MDX-only themes (including Rocket) fail before conversion/output writes; remote themes remain disabled. AstroWind emits `.md`. Scripts/active HTML elements are dropped during HTML conversion; raw `<` and Markdoc opening braces are escaped; links use a scheme allowlist. Unknown shortcode bodies become escaped literal text, not a second Markdown input and not a media-fetch bypass. YAML-only frontmatter prevents gray-matter executable language engines.
+- Uploaded strings are serialized by context: JSON/TS literals, structured YAML documents, Astro frontmatter constants with text expressions (not uploaded literals embedded in template markup), and HTML text escaping at AstroWind's known raw-HTML footer sink. Package/config data is not executable source interpolation. Source delimiter fixtures exercise actual generated compilation/rendering.
+
+## Verified locally
+
+Node 20.20.2 / npm 10.8.2, root `npm ci --legacy-peer-deps`.
+
+- Root build, typecheck, lint; 298 workspace tests after initializing the pinned Rocket submodule (CLI 97, job-core 32, web 63, engine 106), all four unchanged coverage gates, 5 security inventory regressions; negative 99% threshold probe correctly rejects the test command (configuration restored).
+- Independent review round 1 found scratch-root creation followed a pre-existing `.tmp` symlink before validation (cleanup hid the external create/delete). Scratch root creation now uses the existing `containedPath(root, '.')` primitive: all ancestors are checked for symlinks and case/NFC aliases before `mkdir`, and realpath is checked before `mkdtemp`. It intentionally does not recursively scan unrelated scratch children. The 15 added real-service regressions cover both scaffold and bundled AstroWind: ten bad-root/ancestor rejections with zero external/cwd `fs.watch` events, four ordinary migrations with absent/existing safe scratch roots and intermediate cleanup, plus a watcher positive control. RED: ten boundary failures/five controls pass; GREEN: all 15 pass. Both built-artifact service controls and symlink regressions also pass. The actual bundled-template control has a scoped 30-second timeout for template copy/config/git work under coverage; coverage thresholds are unchanged.
+- Mock resolver/transport tests only: private/mixed answers, encoded IPs, DNS rebinding/redirect revalidation, pinned address and TLS options, byte/aggregate/redirect/deadline bounds. No live private-host probes.
+- Actual shared service: traversal/encoding/collision rejection before output, symlink target untouched, local raster byte preservation and rewritten references, no missing-file network fallback, raw converter/MDX rejection.
+- Actual linked generated scaffold build with normal posts/pages/body/draft checks; second generated build with unusual uploaded titles and shortcode link/media regression; third real Astro build of AstroWind's raw-HTML footer sink. A real cold scaffold registry consumer install/build and unchanged-lock reinstall/rebuild also PASS (`scripts/cold-consumer.mjs`); its counters now explicitly assert two emitted published posts and no retained draft source. Successful builds are not toolchain security acceptance.
+- A separate read-only precommit review found shortcode reinsertion bypass and AstroWind raw-HTML footer risk. Both were corrected and covered by generated-rendering checks; independent final PR review is still required.
+
+## Integration D / #20 reconciliation with report34
+
+Normal merge of reviewed `07d09b8` with actual main `95bab420`; no history rewrite.
+Both pre-conversion path validation and raw source inventory are retained. Native
+conversion keeps author/SEO/category/tag/cover metadata and the generated excerpt;
+the version-1 report verifies actual bodies rather than those metadata fields.
+Inline nonempty alt is retained per occurrence. Only an empty alt with an exact
+URL match and unique attachment basename can use attachment fallback. Delimiter-
+bearing alt that cannot be serialized exactly is safe but truthfully non-green;
+unsupported fields/formats are not silently accepted.
+
+`scaffoldFiles` remains the shared pure canonical generator. Privacy proof parses
+the canonical double-quoted JSON site literal as data, then compares all source
+bytes; it never evaluates source or trusts unknown/changed readers. Scaffold,
+public redirects and report artifacts use the #24 safe writer. Native conversion
+does not emit drafts: generated privacy regression tests explicitly seed editor
+fixtures to retain the prior publication-negative/restore matrix.
+
+Author verification: fresh Node20.20.2/npm10.8.2 root cold install; build/typecheck/
+lint; 418 tests (CLI103/job-core33/bot47/web63/engine172 including pinned Rocket)
+and five unchanged coverage gates; security5; negative99 threshold rejection with
+clean restore. Actual 8body/9image/privacy builds, unusual scaffold and AstroWind
+footer-sink builds, native metadata/ordered-alt/fallback build and report negative/
+restore controls, and 15 compiled scratch/watcher controls pass. A real cold
+registry scaffold install/build and unchanged-lock reinstall/rebuild pass with
+lock SHA-256 `07a04ff080328acd48851cb1b527afe25fa6a6f2daf03caea5624bbc56addfa1`.
+The fresh root install still reports 17 advisories including one critical; this
+is not a clean-audit claim. Integration D independently reviews the final delta
+and exact-head remote checks before any guarded merge.
+
+## Remaining gates / honest limitations
+
+- #25 owns the disposable-worker filesystem/network/process/CPU/memory/disk/log sandbox and credential separation. Node's portable pathname APIs do not provide descriptor-relative `openat2` containment: checks and `O_NOFOLLOW` mitigate pre-existing malicious paths, but cannot defend against a hostile concurrent process swapping ancestor directories. Run only in a private job-owned tree; no public-hosting safety claim until #25. Input/output roots are trusted service configuration, not user-selected upload fields.
+- Integrated #23 / PR32 supplies authenticated scoped stores and admission/body/resource limits; its 32 job-core and 63 web tests pass on this branch. Immutable server-derived owner isolation is preserved, not reverted. #22 owns archive extraction. Those boundaries are not duplicated here.
+- #26 owns patched compatible toolchains and cold consumer acceptance. A real cold default AstroWind install succeeded, but the complete build FAILED on the bundled `homes/personal` demo's `RemoteImageNotAllowed` for an Unsplash image. Its consumer install reported 25 findings (6 moderate/18 high/1 critical), plus `undici@8.12.3` requiring Node >=22.19 on Node20. No package overrides, demo removal or toolchain upgrades were attempted in this card. Root install reported 17 findings (6 moderate/10 high/1 critical). These counts are snapshots, not exceptions or remediation claims.
+- Native conversion deliberately skips non-published content and does not promise byte-identical upstream conversion, all WordPress plugin fidelity, arbitrary media types or MDX themes. HTTP-only media must be supplied via the contained local-directory path or migrated to valid HTTPS. Incomplete/unsupported conversion rejects rather than reporting success.
+- No deployments, real credentials, production changes, paid services, registry publication or protected-branch merges were performed. Public/paid operation remains NO-GO pending independent #24 review, #25–26 and #19 acceptance.

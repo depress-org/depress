@@ -16,8 +16,10 @@ const migration = await runMigrate({
   output: site,
   theme: 'scaffold',
 })
-// Converter retains one editable draft in source; public route checks below exclude it.
-assert.equal(migration.posts, 3)
+// #24 native conversion excludes non-published content entirely; report counts
+// reflect the two emitted posts, not an upstream retained draft.
+assert.equal(migration.posts, 2)
+await assert.rejects(lstat(join(site, 'src/content/articles/_drafts/secret-draft/index.mdoc')), { code: 'ENOENT' })
 assert.equal(migration.pages, 1)
 const tracedSpawn = async (cmd, args, opts) => {
   console.log(`Stage: ${args.join(' ')}`)

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { readFile, writeFile, realpath, mkdir } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
+import { containedPath, safeWriteFile } from './input-boundary.js'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 import matter from 'gray-matter'
@@ -284,7 +285,7 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
 }
 
 export async function writeMigrationReports(outputDir: string, manifest: SourceManifest, layout: ReportLayout): Promise<MigrationReportV1> {
-  await mkdir(outputDir, { recursive: true })
+  await containedPath(outputDir, '.')
   const report = await inspectMigration(outputDir, manifest, layout)
   const escape = (s: string) => s.replace(/[\r\n|]/g, ' ')
   const markdown = ['# Migration report (schema 1)', '', `Quality: ${report.qualityPassed ? 'PASS' : 'FAIL'}`, `Source SHA-256: ${manifest.sourceSha256}`, '',
@@ -292,7 +293,7 @@ export async function writeMigrationReports(outputDir: string, manifest: SourceM
     ...report.items.map(i => `| ${i.id} | ${escape(i.type)} | ${i.status} | ${i.findings.map(f => escape(`${f.code}: ${f.detail}`)).join('; ')} |`), '', '## Media',
     ...report.media.map(m => `- ID ${m.id}: ${m.status}; ${m.findings.map(f => escape(`${f.code}: ${f.detail}`)).join('; ')}`), '',
     'The source manifest contains source content and may contain private information. Unsupported features are not preservation claims.', ''].join('\n')
-  for (const [path, value] of [['source-manifest.json', JSON.stringify(manifest, null, 2)], ['migration-report.json', JSON.stringify(report, null, 2)], ['migration-report.md', markdown]]) await writeFile(await safePath(outputDir, path), value)
+  for (const [path, value] of [['source-manifest.json', JSON.stringify(manifest, null, 2)], ['migration-report.json', JSON.stringify(report, null, 2)], ['migration-report.md', markdown]]) await safeWriteFile(outputDir, path, value)
   return report
 }
 

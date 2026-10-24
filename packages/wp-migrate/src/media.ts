@@ -1,4 +1,7 @@
-import { copyFile, mkdir, readdir } from 'fs/promises'
+import { mkdir, readdir } from 'fs/promises'
+import { assertSafeTree, safeSegment, safeWriteFile, assertUniqueSegments } from './input-boundary.js'
+import { rasterExtension, MEDIA_LIMITS } from './media-fetch.js'
+import { readRasterFile } from './media-file.js'
 import { join, relative, extname } from 'path'
 
 const MEDIA_EXTENSIONS = new Set([
@@ -12,6 +15,8 @@ export async function migrateMedia(
   outputDir: string,
   wpSiteUrl?: string,
 ): Promise<Map<string, string>> {
+  await assertSafeTree(mediaSourceDir)
+  await assertSafeTree(outputDir)
   const urlMap = new Map<string, string>()
   const publicMediaDir = join(outputDir, 'public', 'media')
 
@@ -29,9 +34,10 @@ async function scanAndCopy(
   wpSiteUrl?: string,
 ): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true })
+  assertUniqueSegments(entries.map(e => e.name))
 
   for (const entry of entries) {
-    const fullPath = join(dir, entry.name)
+    const fullPath = join(dir, safeSegment(entry.name))
 
     if (entry.isDirectory()) {
       await scanAndCopy(fullPath, baseDir, outputBase, urlMap, wpSiteUrl)
@@ -40,7 +46,10 @@ async function scanAndCopy(
       const dest = join(outputBase, rel)
 
       await mkdir(join(dest, '..'), { recursive: true })
-      await copyFile(fullPath, dest)
+      const bytes = await readRasterFile(fullPath, MEDIA_LIMITS.maxBytes)
+      if (bytes.length > MEDIA_LIMITS.maxBytes) throw new Error('Media byte limit')
+      rasterExtension(bytes)
+      await safeWriteFile(outputBase, rel, bytes)
 
       const newPath = `/media/${rel}`
 
