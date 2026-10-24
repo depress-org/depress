@@ -16,7 +16,7 @@ Refs #24; built on merged #16 / PR28 and reconciled with #23 / PR32 main (`69270
 
 Node 20.20.2 / npm 10.8.2, root `npm ci --legacy-peer-deps`.
 
-- Root build, typecheck, lint; 270 workspace tests (CLI 82, job-core 32, web 63, engine 93), all four unchanged coverage gates, 5 security inventory regressions; negative 99% threshold probe correctly rejects the test command (configuration restored).
+- Root build, typecheck, lint; 283 workspace tests after initializing the pinned Rocket submodule (CLI 82, job-core 32, web 63, engine 106), all four unchanged coverage gates, 5 security inventory regressions; negative 99% threshold probe correctly rejects the test command (configuration restored).
 - Mock resolver/transport tests only: private/mixed answers, encoded IPs, DNS rebinding/redirect revalidation, pinned address and TLS options, byte/aggregate/redirect/deadline bounds. No live private-host probes.
 - Actual shared service: traversal/encoding/collision rejection before output, symlink target untouched, local raster byte preservation and rewritten references, no missing-file network fallback, raw converter/MDX rejection.
 - Actual linked generated scaffold build with normal posts/pages/body/draft checks; second generated build with unusual uploaded titles and shortcode link/media regression; third real Astro build of AstroWind's raw-HTML footer sink. A real cold scaffold registry consumer install/build and unchanged-lock reinstall/rebuild also PASS (`scripts/cold-consumer.mjs`); its counters now explicitly assert two emitted published posts and no retained draft source. Successful builds are not toolchain security acceptance.
