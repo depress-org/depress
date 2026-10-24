@@ -6,47 +6,44 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  TMPDIR: ${{ github.workspace }}/.tmp
+
 jobs:
   build:
     name: Build & type-check
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Build all packages (dependency order)
-        # Build must run before typecheck: @depress-org/core and
-        # @depress-org/wp-migrate are consumed by sibling packages via their
-        # compiled dist/*.d.ts, which only exist after `tsc` has run once.
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps
+      - name: Build all packages (dependency order), including example
         run: npm run build
-
-      - name: Type-check
-        run: npm run typecheck
-
-      - name: Run tests
-        run: npm run test --workspaces --if-present
-
-      - name: Run tests with coverage (best-effort)
-        # Coverage config lands via qa task t_912a3e7a (vitest --coverage setup,
-        # coverage baseline). Non-blocking until that config exists everywhere,
-        # so this step must never fail the required CI job.
-        continue-on-error: true
-        run: npm run test --workspaces --if-present -- --coverage
-
-      - name: Upload coverage to Codecov
+      - run: npm run typecheck
+      - name: All runnable workspace tests and mandatory coverage gates
+        run: npm test
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: codecov/codecov-action@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-          verbose: true
+          name: coverage
+          path: packages/*/coverage/coverage-summary.json
+
+  generated-site:
+    name: Generated fixture site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps
+      - name: Build migration packages
+        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress
+      - name: Migrate WXR and actually build generated Astro site
+        run: npm run test:integration

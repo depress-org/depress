@@ -101,7 +101,7 @@ function startFileServer(
  *  - http://instinsight.com/...       → http://localhost:PORT/...
  *  - http://127.0.0.1/wp/...          → http://localhost:PORT/...   (strips /wp prefix)
  */
-function patchXmlUrls(xml: string, siteUrl: string, localBase: string): string {
+export function patchXmlUrls(xml: string, siteUrl: string, localBase: string): string {
   // parse just the hostname from siteUrl to also cover http:// variant
   let siteOrigin = siteUrl;
   try {
@@ -143,13 +143,13 @@ function patchXmlUrls(xml: string, siteUrl: string, localBase: string): string {
 }
 
 /** Extract the site URL from the WXR <link> element */
-function extractSiteUrl(xml: string): string {
+export function extractSiteUrl(xml: string): string {
   const match = xml.match(/<link>(https?:\/\/[^<]+)<\/link>/);
   return match ? match[1].trim() : 'https://example.com';
 }
 
 /** Resolve the path to the wordpress-export-to-markdown CLI entry point */
-function resolveWp2mdBin(): string {
+export function resolveWp2mdBin(): string {
   // Try to resolve from package location relative to this file
   const candidates = [
     // installed as dependency in the monorepo
