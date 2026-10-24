@@ -132,7 +132,8 @@ describe('source inventory and migration reports', () => {
     const d = await temp(); await good(d)
     const r = await inspectMigration(d, manifest(item(1, 'post', 'hello', 'publish', meta('color', 'red') + meta('_thumbnail_id', '99'), '[gallery ids="2,3"]')), layout)
     expect(codes(r)).toEqual(expect.arrayContaining(['unsupported-shortcode', 'unsupported-custom-field', 'missing-featured-attachment']))
-    expect(r.items[0].findings.find(f => f.code === 'unsupported-shortcode')?.detail).toContain('ids="2,3"')
+    expect(r.items[0].findings.find(f => f.code === 'unsupported-shortcode')?.detail).toMatch(/Source occurrence [a-f0-9]{64}/)
+    expect(JSON.stringify(r.compatibility)).not.toContain('ids=')
   })
   it('accounts for attachment bytes and never claims unused source alt preserved', async () => {
     const d = await temp(); await good(d)

@@ -2,6 +2,10 @@
 
 Status: **recommendation for review, not a shipped plugin API or a user-made decision**. Scope: [#29 / PR-09](https://github.com/depress-org/depress/issues/29). Audited source: `19f239e507bb9b4beaa8ff9273560ba6f2aa5360`. All source citations below are pinned to that revision, not floating line numbers. [Contract](contract-v1.md) · [fixture acceptance and executed evidence](acceptance.md).
 
+## Implementation follow-up
+
+[#30 implementation notes](implementation-v1.md) describe the bounded opt-in runtime on its implementation branch and its verification limits. The historical matrix below is not silently upgraded to shipped; independent QA/P12 integration remains separate.
+
 ## What a user can safely expect
 
 A migrated static blog does **not** run WordPress PHP plugins. Some exported values can be preserved; some behavior can be replaced by build-time static output. Neither is compatibility with an installed WordPress plugin, its settings, PHP hooks, database tables, or version range. An XML export is not an installed-plugin inventory. No WordPress/PHP version compatibility is certified here.

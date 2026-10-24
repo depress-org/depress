@@ -23,6 +23,8 @@ import {
   DEFAULT_THEME_ID,
   createSourceManifest,
   writeMigrationReports,
+  validateStaticPluginConfig,
+  StaticPluginError,
 } from '@depress-org/wp-migrate'
 export interface MigrateOptions {
   input?: string
@@ -31,6 +33,8 @@ export interface MigrateOptions {
   output: string
   repo?: string
   theme?: string
+  /** JSON data only: pinned reviewed in-tree plugins. Empty by default. */
+  staticPlugins?: unknown
   /** CLI-only explicit overwrite permission; services reject non-empty output by default. */
   overwrite?: boolean
 }
@@ -135,8 +139,21 @@ async function migrate(options: MigrateOptions) {
       'Migration failed: invalid input or conversion error',
     )
   }
-  validateExportPaths(wpExport)
+  validateExportPaths(wpExport) // preserve #24's no-write path preflight
   const manifest = createSourceManifest(xmlContent!, wpExport)
+  const layout = adapter ? {
+    contentDir: adapter.contentDir, pagesDir: adapter.pagesDir, fileExt: adapter.fileExt,
+    useDirectoryEntries: adapter.useDirectoryEntries ?? false,
+  } : { contentDir: 'src/content/articles', pagesDir: 'src/content/pages', fileExt: 'mdoc', useDirectoryEntries: true, pagesUseDirectoryEntries: true }
+  try {
+    manifest.staticPlugins = validateStaticPluginConfig(options.staticPlugins)
+    if (new Set(manifest.items.map(i => i.id)).size !== manifest.items.length) throw new ServiceError('DUPLICATE_SOURCE_ID', 'duplicate-source-id')
+  } catch (error) {
+    // Persist safe template codes only; never invalid config/module paths/values.
+    if (error instanceof StaticPluginError) manifest.pluginFailure = error.code
+    await writeMigrationReports(outputDir, manifest, layout)
+    throw error instanceof StaticPluginError ? new ServiceError(error.code, error.code) : error
+  }
   const allMenus = parseNavFromXml(
     xmlContent!,
     wpExport.posts,
@@ -151,7 +168,7 @@ async function migrate(options: MigrateOptions) {
   try {
     // Input validation runs before conversion; upstream wp2md is never invoked.
     const contentDest = adapter ? join(tmpDir, 'content') : outputDir
-    const transformResult = await convertSafeExport(wpExport, contentDest, wpDir)
+    const transformResult = await convertSafeExport(wpExport, contentDest, wpDir, manifest)
     // Step 3b: Generate redirect map
     const redirectMap: Record<string, string> = {}
     const netlifyRedirects: string[] = [
@@ -260,10 +277,7 @@ async function migrate(options: MigrateOptions) {
     // Redirects must ship with the built site, not only the workspace root.
     await safeWriteFile(outputDir, 'public/redirects.json', JSON.stringify(redirectMap, null, 2) + '\n')
     await safeWriteFile(outputDir, 'public/_redirects', netlifyRedirects.join('\n') + '\n')
-    const report = await writeMigrationReports(outputDir, manifest, adapter ? {
-      contentDir: adapter.contentDir, pagesDir: adapter.pagesDir, fileExt: adapter.fileExt,
-      useDirectoryEntries: adapter.useDirectoryEntries ?? false,
-    } : { contentDir: 'src/content/articles', pagesDir: 'src/content/pages', fileExt: 'mdoc', useDirectoryEntries: true, pagesUseDirectoryEntries: true })
+    const report = await writeMigrationReports(outputDir, manifest, layout)
     return {
       outputDir,
       reportPath: join(outputDir, 'migration-report.json'),
@@ -272,11 +286,9 @@ async function migrate(options: MigrateOptions) {
       pages: transformResult.pagesTransformed,
     }
   } catch (error) {
+    if (error instanceof StaticPluginError) manifest.pluginFailure = error.code
     // A valid source inventory still needs an explicit failed-item report on conversion failure.
-    await writeMigrationReports(outputDir, manifest, adapter ? {
-      contentDir: adapter.contentDir, pagesDir: adapter.pagesDir, fileExt: adapter.fileExt,
-      useDirectoryEntries: adapter.useDirectoryEntries ?? false,
-    } : { contentDir: 'src/content/articles', pagesDir: 'src/content/pages', fileExt: 'mdoc', useDirectoryEntries: true, pagesUseDirectoryEntries: true }).catch(() => {})
+    await writeMigrationReports(outputDir, manifest, layout).catch(() => {})
     throw error
   } finally {
     await rm(tmpDir, { recursive: true, force: true })

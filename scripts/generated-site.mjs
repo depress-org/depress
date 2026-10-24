@@ -109,7 +109,8 @@ const hostileXml = readFileSync(join(root, 'packages/cli/src/__fixtures__/offlin
 const hostileInput = join(site, '..', 'hostile.xml')
 const hostileSite = join(site, '..', 'hostile-site')
 writeFileSync(hostileInput, hostileXml)
-run(process.execPath, ['packages/cli/dist/index.js', 'migrate', '--input', hostileInput, '--output', hostileSite, '--theme', 'scaffold'])
+assert.throws(() => run(process.execPath, ['packages/cli/dist/index.js', 'migrate', '--input', hostileInput, '--output', hostileSite, '--theme', 'scaffold']), error => error.status === 1)
+assert.equal(JSON.parse(readFileSync(join(hostileSite, 'migration-report.json'))).qualityPassed, false) // #30: unresolved source cannot exit green
 symlinkSync(join(root, 'node_modules'), join(hostileSite, 'node_modules'), 'dir')
 mkdirSync(join(hostileSite, 'src/content/articles/_drafts/secret-draft'), { recursive: true })
 writeFileSync(join(hostileSite, 'src/content/articles/_drafts/secret-draft/index.mdoc'), editor)
@@ -157,3 +158,5 @@ assert(sinkHtml.includes('&lt;script&gt;text-only&lt;/script&gt;'), 'AstroWind f
 console.log('AstroWind footer sink real generated build passed (not full theme acceptance)')
 const { verifyGeneratedNativeEvidence } = await import('./generated-native-evidence.mjs')
 await verifyGeneratedNativeEvidence(root)
+const { verifyGeneratedStaticPluginEvidence } = await import('./generated-static-plugin-evidence.mjs')
+await verifyGeneratedStaticPluginEvidence(root)
