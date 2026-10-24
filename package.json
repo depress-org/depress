@@ -16,6 +16,8 @@
     "test:coverage": "npm test",
     "test:integration": "node scripts/generated-site.mjs",
     "test:media-archive": "node scripts/media-archive-site.mjs",
+    "test:oss-packaging": "node scripts/oss-consumer.mjs",
+    "test:oss-consumer": "node scripts/oss-consumer.mjs --require-default-build",
     "test:gate": "node scripts/verify-coverage-gate.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clean": "find . -name 'dist' -type d -not -path '*/node_modules/*' | xargs rm -rf"
