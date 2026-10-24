@@ -160,3 +160,5 @@ const { verifyGeneratedNativeEvidence } = await import('./generated-native-evide
 await verifyGeneratedNativeEvidence(root)
 const { verifyGeneratedStaticPluginEvidence } = await import('./generated-static-plugin-evidence.mjs')
 await verifyGeneratedStaticPluginEvidence(root)
+const { verifyGeneratedMalformedShortcodeEvidence } = await import('./generated-malformed-shortcode-evidence.mjs')
+await verifyGeneratedMalformedShortcodeEvidence(root)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createStaticPluginHost, validateStaticPluginConfig } from '../static-plugins.js'
-import { scanShortcodes } from '../shortcode-tokens.js'
+import { scanShortcodes, shortcodeSourceText } from '../shortcode-tokens.js'
 import { runHook, validateConfig, validateReplacements, type RegisteredStaticPlugin } from '../static-plugin-host.js'
 
 const config = { api: 'depress.static-plugin/v1', plugins: [{ id: 'core.static-gallery', version: '1', options: {} }] }
@@ -26,11 +26,53 @@ describe('#30 static-plugin v1', () => {
     expect(tokens[0]).toMatchObject({ tag: 'gallery', malformed: true, start: content.lastIndexOf('[gallery'), end: content.length })
     expect(scanShortcodes(content, bad.key)).toEqual(tokens)
     const host = createStaticPluginHost({ ...source, items: [bad] }, config)
-    expect(host.prepare(bad).content).toBe(content)
-    const result = await host.transform(bad, content, media)
-    expect(result.markdown).toBe(content)
+    const prepared = host.prepare(bad).content
+    expect(prepared).toBe(`DEPRESSGALLERY0 [[gallery ids="11"]] ${tokens[0].marker}`)
+    const result = await host.transform(bad, prepared, media)
+    expect(result.markdown).toBe(`DEPRESSGALLERY0 [[gallery ids="11"]] <!-- depress review ${tokens[0].tokenId} -->`)
     expect(result.replacements).toEqual([])
     expect(result.diagnostics).toEqual([expect.objectContaining({ code: 'WP_SHORTCODE_UNRESOLVED', tokenId: tokens[0].tokenId })])
+  })
+  it.each([
+    '[contact-form password="PRIVATE] inner safe.',
+    "[contact-form password='PRIVATE] inner safe.",
+    '[gallery ids="PRIVATE\ninner safe.',
+    '[gallery ids="PRIVATE\rinner safe.',
+    '[gallery ids="PRIVATE<p>inner safe.</p>',
+    '[/gallery password="PRIVATE] inner safe.',
+    '[gallery ids="PRIVATE[unknown]inner safe.[/unknown]',
+  ])('P04 masks only recognized malformed spans and preserves safe inner prose: %s', async candidate => {
+    const content = `DEPRESSOPAQUE Before ${candidate} After safe.`
+    const bad = { ...item, content }
+    const host = createStaticPluginHost({ ...source, items: [bad] }, config)
+    const prepared = host.prepare(bad).content
+    const malformed = host.tokens(bad).find(t => t.malformed)!
+    expect(content.slice(malformed.start, malformed.end)).toContain('PRIVATE')
+    expect(prepared).not.toContain('PRIVATE')
+    expect(prepared).toContain('inner safe.')
+    expect(shortcodeSourceText(content, bad.key)).not.toContain('PRIVATE')
+    expect(shortcodeSourceText(content, bad.key)).toContain('inner safe.')
+    const result = await host.transform(bad, prepared, media)
+    expect(result.markdown).toContain('DEPRESSOPAQUE Before')
+    expect(result.markdown).toContain('inner safe.')
+    expect(result.markdown).toContain('After safe.')
+    expect(result.markdown).toContain(`<!-- depress review ${malformed.tokenId} -->`)
+    expect(result.replacements).toEqual([])
+    expect(JSON.stringify(host.sourceView)).not.toContain('PRIVATE')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('PRIVATE')
+    for (const changed of [prepared.replace(malformed.marker, ''), prepared + malformed.marker]) {
+      await expect(host.transform(bad, changed, media)).rejects.toThrow('PLUGIN_OUTPUT_REJECTED')
+    }
+  })
+  it('P09 malformed owned-looking gallery stays unowned and rolls back adjacent valid gallery', async () => {
+    const bad = { ...item, content: '[gallery ids="11,12"] safe [gallery ids="PRIVATE] inner safe.' }
+    const host = createStaticPluginHost({ ...source, items: [bad] }, config)
+    const result = await host.transform(bad, host.prepare(bad).content, media)
+    expect(result.replacements).toEqual([])
+    expect(result.markdown).not.toContain('![')
+    expect(result.markdown).not.toContain('PRIVATE')
+    expect(result.markdown).toContain('inner safe.')
+    expect(result.diagnostics).toEqual([1, 0].map(index => expect.objectContaining({ code: 'WP_SHORTCODE_UNRESOLVED', tokenId: host.tokens(bad)[index].tokenId })))
   })
   it('P05 preserves ordered local gallery images, default off is unresolved', async () => {
     const host = createStaticPluginHost(source, config)

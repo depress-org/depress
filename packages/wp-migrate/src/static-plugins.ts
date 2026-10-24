@@ -79,7 +79,6 @@ export function createStaticPluginHost(manifest: SourceManifest, value?: unknown
       quota(diagnostics)
       let markdown = normalizedMarkdown
       for (const token of tokens) {
-        if (token.malformed) continue // converter retains this candidate as safe literal text
         if (markdown.split(token.marker).length !== 2) throw new StaticPluginError('PLUGIN_OUTPUT_REJECTED')
         markdown = markdown.replace(token.marker, () => replacements.find(r => r.tokenId === token.tokenId)?.markdown ?? `<!-- depress review ${token.tokenId} -->`)
       }
