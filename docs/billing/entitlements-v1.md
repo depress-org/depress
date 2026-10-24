@@ -93,9 +93,30 @@ concurrency limit. Ended-period unused allowance never rolls over.
 `policyVersion` names an immutable reviewed snapshot of quota/seat/concurrency/
 grace rules; price currency/amount/tax/renewal/refund terms live in separately
 approved configuration, never in this entitlement or a fake event. A policy
-change takes effect only with a new nonoverlapping period; no in-place shrinking
-below committed usage, mid-period upgrades or retroactive repricing in v1.
-Unsupported changes return `POLICY_CHANGE_REQUIRES_NEW_PERIOD` unchanged.
+or plan change is **unsupported throughout v1, including at renewal**. A new
+period is not authorization to change policy. Well-formed requests selecting a
+different known plan/policy return `POLICY_CHANGE_UNSUPPORTED_V1` unchanged;
+unknown plan/policy or malformed input returns `INVALID_EVENT`. No downgrade,
+upgrade, grandfathering, seat eviction, in-place shrinking or repricing is
+specified or authorized. Supporting any of these requires a separately reviewed
+contract revision with commitment/seat migration rules, not a new fake event.
+
+Renewal inherits the grant's exact immutable `planId` and `policyVersion`.
+Optional explicit selectors must match them. The server's existing immutable
+policy snapshot is authoritative for quota, seat and concurrency limits; an
+input's `period.limit` is only an assertion and must equal that snapshot's
+`limit`, otherwise `INVALID_EVENT`. Renewal cannot supply seat/concurrency
+limits (unknown fields are invalid), clear membership or modify prior ledgers.
+Thus two pinned old-period reservations/two assigned seats remain valid under
+the same limits after renewal; proposed smaller limits are rejected, never
+silently applied, deferred or grandfathered. A same-policy renewal preserves
+all assigned principals and the global count of active reservations.
+
+After authentication, receipt/terminal protection, input-shape/known-ID validation
+and source-sequence checks, detect a requested known plan/policy change before
+checking the current-policy quota assertion. This makes a well-formed downgrade
+return `POLICY_CHANGE_UNSUPPORTED_V1`, not an implicit new-policy application.
+`provider.policy_change` is a recognized unsupported input, never a mutation.
 
 ## 4. Authentication, seats and ownership
 
@@ -168,10 +189,10 @@ result; same ID + changed payload is `IDEMPOTENCY_CONFLICT`.
 |---|---|
 | `provider.payment_failed` | Current active/scheduled grant enters `grace`; explicit bounded `graceUntil` must be > now and <= period end; no new reservations even during grace. Existing reservations may finish. Never extend grace by redelivery. |
 | `provider.recovered` | If newer, before `graceUntil` and period end, and not cancelled/expired: back to `active` (or `cancel_scheduled` if scheduled); no reset of period counters. |
-| `clock.advance` | Trusted server clock is monotonic. At grace deadline mark `expired`; at period end mark `expired` (or `cancelled` if cancellation scheduled), without releasing pinned reservations. No client clock. |
+| `clock.advance` | Trusted server clock is monotonic. Process due deadlines chronologically, with scheduled cancellation winning equal deadlines; see exact combined rules below. Never release pinned reservations. No client clock. |
 | `provider.cancel_scheduled` | Set `cancelScheduled: true`; status becomes `cancel_scheduled` unless already `grace`, in which case preserve grace status/deadline and block admission. At boundary rights become permanently cancelled for this grant. |
 | `provider.cancel_now` | Immediately set `cancelled`, tombstone epoch, no new work; prior reservations may settle. Does not itself cancel jobs, refund consumption or authorize artifact access. |
-| `provider.renewed` | Only from ordinary period expiration (`expired`, `expiryReason: period_end`), with no scheduled cancellation/outstanding grace, greater sequence and next period starting exactly at previous end; now must be within the new period. Set active, clear expiryReason, preserve old ledger and add new bounded counters at zero. Old reserved work remains pinned and occupies concurrency. Early renewal, skipped/overlapping periods and renewal after grace expiry fail closed. |
+| `provider.renewed` | Only same-plan/same-policy, from ordinary period expiration (`expired`, `expiryReason: period_end`), with no scheduled cancellation/outstanding grace, greater sequence and next period starting exactly at previous end; now must be within the new period. Derive limits from the existing immutable server policy as specified in section 3; set active, clear expiryReason, preserve membership/old ledger and add new bounded counters at zero. Old reserved work remains pinned and occupies concurrency. Early renewal, skipped/overlapping periods and renewal after grace expiry fail closed. |
 | `provider.activate` on cancelled/expired epoch | `GRANT_TERMINAL`, even with a higher sequence; cannot resurrect rights or reset quota. Reinstatement after cancellation/grace expiry requires a separate explicitly authorized new epoch and audited issuance, outside this PR's oracle; ordinary period renewal is the sole expired-period exception above. |
 
 An event requesting a past period or retroactive usage reset is `INVALID_EVENT`
@@ -182,15 +203,42 @@ provider event advances sequence and revision once; clock changes status but
 never provider sequence. No renewal while cancellation is scheduled or grace
 is outstanding. No automatic reconciliation/reinstatement implementation here.
 
-Trusted clock processing always precedes each operation: apply all due deadlines
-before evaluating its input (grace deadline wins over ordinary period expiry;
-scheduled cancellation wins at period end). `clock.advance` is the only fixture
-clock control; provider inputs never supply time. At ordinary period end set
-`expiryReason: period_end`; at grace deadline set `grace_deadline`. A renewal at
-the boundary therefore sees ordinary expiration regardless of timer delivery
-order. Increment revision once per actual deadline status transition and once
-per applied provider/membership mutation; duplicate clock ticks do not increment.
-Reservation/terminal changes do not change grant revision.
+Trusted clock processing always precedes each operation: process all due
+deadlines in timestamp order before evaluating its input. `clock.advance` is
+the only fixture clock control; provider inputs never supply time. The exact
+terminal composition (still **proposed**, not an approved service policy) is:
+
+- At a grace deadline strictly before period end: `status: expired`,
+  `expiryReason: grace_deadline`, retain the original `graceUntil`,
+  `cancelledAt: null`; increment revision once. Ordinary period end later does
+  not replace this reason or increment revision if no cancellation is scheduled.
+- A previously scheduled cancellation remains a due clock obligation even
+  after grace expiry. At period end set `status: cancelled`,
+  `expiryReason: null`, `graceUntil: null`, `cancelledAt: period.end`, retaining
+  `cancelScheduled: true`; increment revision once more. This adds a tombstone,
+  **not restored rights**. It is the only clock transition out of grace expiry.
+- If grace deadline equals period end and cancellation is scheduled, perform
+  only the cancellation transition above: one revision, no intermediate expired
+  state. Without scheduled cancellation, grace expiry wins over ordinary expiry
+  at equal timestamps: one revision with `expiryReason: grace_deadline`.
+- At ordinary period end without outstanding grace/scheduled cancellation:
+  `status: expired`, `expiryReason: period_end`, `graceUntil: null`,
+  `cancelledAt: null`; increment revision once. This alone is renewable.
+- Clock transitions never change provider sequence, period counters, membership,
+  plan/policy, reservations or scheduled-cancellation flag. Once cancelled,
+  further deadlines/ticks are no-ops. Explicit `cancel_now` records the trusted
+  current time; scheduled cancellation records the boundary time, never the
+  later observation/timer-delivery time.
+
+A direct jump over both deadlines must produce exactly the same full state
+(including revision) as separate ticks at each deadline followed by a tick at
+the same final time: two terminal transitions when grace precedes scheduled
+cancellation, one when equal. Duplicate ticks never increment revision. No
+provider recovery/renewal/activation or new reservation is allowed between
+grace expiry and scheduled cancellation, nor after cancellation. A renewal at an
+ordinary boundary sees expiration regardless of timer delivery order.
+Increment revision once per applied provider/membership mutation as well;
+reservation/terminal job changes do not change grant revision.
 
 Other status/event pairs: `recovered` is valid only from grace strictly before
 its deadline; `payment_failed` only from active/cancel_scheduled. A newer failure
@@ -200,8 +248,10 @@ sequence and preserves any grace deadline. `cancel_now` from any noncancelled
 status applies and clears grace/expiry reason. `activate` on an existing grant
 is `INVALID_TRANSITION` except cancelled/expired => `GRANT_TERMINAL`. Other
 unsupported pairs are `INVALID_TRANSITION`. Cancelled is terminal for every
-provider operation; expired by grace is terminal except an explicit cancel_now
-may add a cancellation tombstone. Provider-rejected transitions do not advance
+provider operation; expired by grace is terminal for provider operations except
+an explicit cancel_now may add a cancellation tombstone. A previously scheduled
+clock cancellation still adds its tombstone at period end as specified above.
+Provider-rejected transitions do not advance
 sequence/revision. Equal sequence with identical semantic content returns
 `SEQUENCE_REPLAY` unchanged; equal sequence with different content is
 `SEQUENCE_CONFLICT`. Sequence content excludes eventId/sourceNamespace (the
@@ -276,6 +326,11 @@ behavior. Arrays for reservations/members are canonical sorted by ID. All fake
 identities, IDs, dates and allowances are test vectors, not customers or offers.
 No network/provider response is synthesized as execution evidence.
 
+`equivalenceChecks` names pairs of independent scenarios whose final complete
+observable states must match exactly, including trusted time and revision.
+The tick/jump pairs retain the same reserved work through both deadlines and
+settle it only afterward; no event between those deadlines can regain admission.
+
 `reserve` uses the authenticated `actorOwnerId`/`principalId` and fake job binding;
 `ownerId` denotes the lookup target only, never an authority override.
 `job.retry`, terminal events and provider events are trusted internal inputs.
@@ -300,9 +355,9 @@ fields when creating canonical records, and compare the same projection.
 | A03 terminal release once; no late-success revival | `failure_releases_once`, `cancel_wins`, `success_wins` |
 | A04 bounded quota and concurrency under races | `quota_serialization`, `concurrency_serialization`, `resource_denial` |
 | A05 duplicate/stale/conflicting events cannot reset/revive | `duplicate_cancel`, `stale_provider`, `sequence_conflict`, `invalid_event`, `equal_sequence_same_content`, `callback_id_conflict`, `rejected_ids_not_committed` |
-| A06 cancellation/grace/boundary semantics | `scheduled_cancel_boundary`, `grace_recovery`, `grace_expiry`, `immediate_cancel_inflight`, `grace_then_scheduled_cancel`, `recovery_at_deadline` |
+| A06 cancellation/grace/boundary semantics | `scheduled_cancel_boundary`, `grace_recovery`, `grace_expiry`, `immediate_cancel_inflight`, `grace_then_scheduled_cancel`, `recovery_at_deadline`, `grace_before_cancel_ticks`, `grace_before_cancel_jump`, `grace_equal_cancel_ticks`, `grace_equal_cancel_jump`, `grace_expiry_past_period_end` |
 | A07 owner isolation/seats/shared credentials | `foreign_owner`, `seat_capacity_and_revocation`, `shared_owner_quota`, `unauthenticated_no_lookup` |
-| A08 period pinning and no carry/reset | `renewal_pins_old_reservation`, `period_boundary`, `midperiod_policy_rejected` |
+| A08 period pinning, same-policy-only renewal and no carry/reset | `renewal_pins_old_reservation`, `period_boundary`, `midperiod_policy_rejected`, `renewal_policy_change_rejected_with_commitments`, `renewal_limits_from_server_policy` |
 | A09 atomic failure/restart replay | `reserve_rollback`, `settlement_rollback`; later #25 tests must kill/restart/fence real workers and prove durable replay |
 
 This docs PR validates JSON parsing, IDs/references, oracle invariants and

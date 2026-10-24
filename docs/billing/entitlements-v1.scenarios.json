@@ -36,6 +36,22 @@
       "seatLimit": 2,
       "concurrencyLimit": 1,
       "maxGraceSeconds": 432000
+    },
+    "test-policy-downgrade": {
+      "planId": "hosted-test",
+      "unit": "hosted_migration",
+      "limit": 1,
+      "seatLimit": 1,
+      "concurrencyLimit": 1,
+      "maxGraceSeconds": 432000
+    },
+    "test-policy-other-plan": {
+      "planId": "hosted-test-other",
+      "unit": "hosted_migration",
+      "limit": 2,
+      "seatLimit": 2,
+      "concurrencyLimit": 2,
+      "maxGraceSeconds": 432000
     }
   },
   "projectionMapping": {
@@ -6124,11 +6140,10 @@
             "entitlementId": "grant-a",
             "type": "policy_change",
             "sequence": 2,
-            "policyVersion": "test-policy-2",
-            "limit": 1
+            "policyVersion": "test-policy-2"
           },
           "expect": {
-            "result": "POLICY_CHANGE_REQUIRES_NEW_PERIOD",
+            "result": "POLICY_CHANGE_UNSUPPORTED_V1",
             "state": {
               "now": "2026-01-15T00:00:00.000Z",
               "grant": {
@@ -7640,6 +7655,4291 @@
           }
         }
       ]
+    },
+    {
+      "id": "renewal_policy_change_rejected_with_commitments",
+      "initialState": "rollover_ready",
+      "steps": [
+        {
+          "operation": "member.add",
+          "input": {
+            "requestId": "member-renewal",
+            "actorOwnerId": "owner-a",
+            "principalId": "principal-b"
+          },
+          "expect": {
+            "result": "MEMBER_ADDED",
+            "state": {
+              "now": "2026-01-31T23:59:59.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-1",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-1"
+          },
+          "expect": {
+            "result": "RESERVED",
+            "state": {
+              "now": "2026-01-31T23:59:59.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-2",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-b",
+            "jobId": "job-2",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-2"
+          },
+          "expect": {
+            "result": "RESERVED",
+            "state": {
+              "now": "2026-01-31T23:59:59.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 2
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-01T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 2
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "policyVersion": "test-policy-downgrade",
+            "planId": "hosted-test",
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 1
+            }
+          },
+          "expect": {
+            "result": "POLICY_CHANGE_UNSUPPORTED_V1",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 2
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "policyVersion": "test-policy-other-plan",
+            "planId": "hosted-test-other",
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "POLICY_CHANGE_UNSUPPORTED_V1",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 2
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "policyVersion": "test-policy-1",
+            "planId": "hosted-test",
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "active",
+                "periodId": "p2",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 2
+                },
+                "p2": {
+                  "start": "2026-02-01T00:00:00.000Z",
+                  "end": "2026-03-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-3",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-3",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-3"
+          },
+          "expect": {
+            "result": "CONCURRENCY_LIMIT",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "active",
+                "periodId": "p2",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 2
+                },
+                "p2": {
+                  "start": "2026-02-01T00:00:00.000Z",
+                  "end": "2026-03-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "job.succeeded",
+          "input": {
+            "eventId": "job-event-1",
+            "ownerId": "owner-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1"
+          },
+          "expect": {
+            "result": "CONSUMED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "active",
+                "periodId": "p2",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 1,
+                  "reserved": 1
+                },
+                "p2": {
+                  "start": "2026-02-01T00:00:00.000Z",
+                  "end": "2026-03-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "consumed",
+                  "terminalReason": "succeeded",
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-3",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-3",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-3"
+          },
+          "expect": {
+            "result": "RESERVED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "active",
+                "periodId": "p2",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a",
+                  "principal-b"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 1,
+                  "reserved": 1
+                },
+                "p2": {
+                  "start": "2026-02-01T00:00:00.000Z",
+                  "end": "2026-03-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "consumed",
+                  "terminalReason": "succeeded",
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-2",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-2",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                },
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-3",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p2",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-3",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "renewal_limits_from_server_policy",
+      "initialState": "active",
+      "steps": [
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-01T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 3
+            }
+          },
+          "expect": {
+            "result": "INVALID_EVENT",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 1
+            }
+          },
+          "expect": {
+            "result": "INVALID_EVENT",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            },
+            "seatLimit": 1,
+            "concurrencyLimit": 1
+          },
+          "expect": {
+            "result": "INVALID_EVENT",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            },
+            "policyVersion": "unknown-policy"
+          },
+          "expect": {
+            "result": "INVALID_EVENT",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": "period_end",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 2,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            },
+            "planId": "hosted-test",
+            "policyVersion": "test-policy-1"
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "active",
+                "periodId": "p2",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                },
+                "p2": {
+                  "start": "2026-02-01T00:00:00.000Z",
+                  "end": "2026-03-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace_before_cancel_ticks",
+      "initialState": "active",
+      "steps": [
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-1",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-1"
+          },
+          "expect": {
+            "result": "RESERVED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 1,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "payment_failed",
+            "sequence": 2,
+            "graceUntil": "2026-01-20T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-3",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "cancel_scheduled",
+            "sequence": 3
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-01-20T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-01-20T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-01-20T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-01-20T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "recovered",
+            "sequence": 4
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-01-20T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 4,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-01-20T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-2",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-2",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-2"
+          },
+          "expect": {
+            "result": "ENTITLEMENT_INACTIVE",
+            "state": {
+              "now": "2026-01-20T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-01T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "recovered",
+            "sequence": 4
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 4,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-5",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "activate",
+            "sequence": 5
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-2",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-2",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-2"
+          },
+          "expect": {
+            "result": "ENTITLEMENT_INACTIVE",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "job.succeeded",
+          "input": {
+            "eventId": "job-event-1",
+            "ownerId": "owner-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1"
+          },
+          "expect": {
+            "result": "CONSUMED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 1,
+                  "reserved": 0
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "consumed",
+                  "terminalReason": "succeeded",
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace_before_cancel_jump",
+      "initialState": "active",
+      "steps": [
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-1",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-1"
+          },
+          "expect": {
+            "result": "RESERVED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 1,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "payment_failed",
+            "sequence": 2,
+            "graceUntil": "2026-01-20T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-3",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "cancel_scheduled",
+            "sequence": 3
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "recovered",
+            "sequence": 4
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 4,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-5",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "activate",
+            "sequence": 5
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-2",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-2",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-2"
+          },
+          "expect": {
+            "result": "ENTITLEMENT_INACTIVE",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "job.succeeded",
+          "input": {
+            "eventId": "job-event-1",
+            "ownerId": "owner-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1"
+          },
+          "expect": {
+            "result": "CONSUMED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 5,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 1,
+                  "reserved": 0
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "consumed",
+                  "terminalReason": "succeeded",
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace_equal_cancel_ticks",
+      "initialState": "active",
+      "steps": [
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-1",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-1"
+          },
+          "expect": {
+            "result": "RESERVED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 1,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-01-28T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-01-28T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 1,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "payment_failed",
+            "sequence": 2,
+            "graceUntil": "2026-02-01T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-28T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-02-01T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-3",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "cancel_scheduled",
+            "sequence": 3
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-28T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-02-01T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-01T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-01T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "recovered",
+            "sequence": 4
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 4,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-5",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "activate",
+            "sequence": 5
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-2",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-2",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-2"
+          },
+          "expect": {
+            "result": "ENTITLEMENT_INACTIVE",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "job.succeeded",
+          "input": {
+            "eventId": "job-event-1",
+            "ownerId": "owner-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1"
+          },
+          "expect": {
+            "result": "CONSUMED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 1,
+                  "reserved": 0
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "consumed",
+                  "terminalReason": "succeeded",
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace_equal_cancel_jump",
+      "initialState": "active",
+      "steps": [
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-1",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-1"
+          },
+          "expect": {
+            "result": "RESERVED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 1,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-01-28T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-01-28T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 1,
+                "status": "active",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": null,
+                "lastSourceSequence": 1,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "payment_failed",
+            "sequence": 2,
+            "graceUntil": "2026-02-01T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-28T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-02-01T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-3",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "cancel_scheduled",
+            "sequence": 3
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-28T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-02-01T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "recovered",
+            "sequence": 4
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-4",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 4,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-5",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "activate",
+            "sequence": 5
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "reserve",
+          "input": {
+            "requestId": "reserve-2",
+            "actorOwnerId": "owner-a",
+            "ownerId": "owner-a",
+            "principalId": "principal-a",
+            "jobId": "job-2",
+            "attemptGroup": "group-1",
+            "payloadRef": "input-2"
+          },
+          "expect": {
+            "result": "ENTITLEMENT_INACTIVE",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 1
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "reserved",
+                  "terminalReason": null,
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "operation": "job.succeeded",
+          "input": {
+            "eventId": "job-event-1",
+            "ownerId": "owner-a",
+            "jobId": "job-1",
+            "attemptGroup": "group-1"
+          },
+          "expect": {
+            "result": "CONSUMED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 4,
+                "status": "cancelled",
+                "periodId": "p1",
+                "graceUntil": null,
+                "cancelledAt": "2026-02-01T00:00:00.000Z",
+                "lastSourceSequence": 3,
+                "cancelScheduled": true,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 1,
+                  "reserved": 0
+                }
+              },
+              "reservations": [
+                {
+                  "ownerId": "owner-a",
+                  "jobId": "job-1",
+                  "attemptGroup": "group-1",
+                  "entitlementId": "grant-a",
+                  "periodId": "p1",
+                  "policyVersion": "test-policy-1",
+                  "units": 1,
+                  "payloadRef": "input-1",
+                  "state": "consumed",
+                  "terminalReason": "succeeded",
+                  "cancelRequested": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace_expiry_past_period_end",
+      "initialState": "active",
+      "steps": [
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-2",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "payment_failed",
+            "sequence": 2,
+            "graceUntil": "2026-01-20T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "APPLIED",
+            "state": {
+              "now": "2026-01-15T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 2,
+                "status": "grace",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": null,
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-01-20T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-01-20T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "clock.advance",
+          "input": {
+            "now": "2026-02-02T00:00:00.000Z"
+          },
+          "expect": {
+            "result": "CLOCK_APPLIED",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        },
+        {
+          "operation": "provider",
+          "input": {
+            "sourceNamespace": "fake-provider",
+            "eventId": "provider-3",
+            "ownerId": "owner-a",
+            "entitlementId": "grant-a",
+            "type": "renewed",
+            "sequence": 3,
+            "period": {
+              "periodId": "p2",
+              "start": "2026-02-01T00:00:00.000Z",
+              "end": "2026-03-01T00:00:00.000Z",
+              "limit": 2
+            }
+          },
+          "expect": {
+            "result": "GRANT_TERMINAL",
+            "state": {
+              "now": "2026-02-02T00:00:00.000Z",
+              "grant": {
+                "schemaVersion": "entitlement.v1",
+                "ownerId": "owner-a",
+                "entitlementId": "grant-a",
+                "planId": "hosted-test",
+                "policyVersion": "test-policy-1",
+                "revision": 3,
+                "status": "expired",
+                "periodId": "p1",
+                "graceUntil": "2026-01-20T00:00:00.000Z",
+                "cancelledAt": null,
+                "lastSourceSequence": 2,
+                "cancelScheduled": false,
+                "expiryReason": "grace_deadline",
+                "seatLimit": 2,
+                "concurrencyLimit": 2,
+                "assignedPrincipalIds": [
+                  "principal-a"
+                ]
+              },
+              "periods": {
+                "p1": {
+                  "start": "2026-01-01T00:00:00.000Z",
+                  "end": "2026-02-01T00:00:00.000Z",
+                  "limit": 2,
+                  "consumed": 0,
+                  "reserved": 0
+                }
+              },
+              "reservations": []
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "equivalenceChecks": [
+    {
+      "scenarioIds": [
+        "grace_before_cancel_ticks",
+        "grace_before_cancel_jump"
+      ],
+      "compare": "final complete observable state including revision"
+    },
+    {
+      "scenarioIds": [
+        "grace_equal_cancel_ticks",
+        "grace_equal_cancel_jump"
+      ],
+      "compare": "final complete observable state including revision"
     }
   ]
 }
