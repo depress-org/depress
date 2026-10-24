@@ -32,8 +32,9 @@ versions/integrities/archive dependencies are not refreshed here.
 
 ## Executable regression
 
-Use Node20/npm10 (the existing CI `.nvmrc` matrix), initialize submodules, cold
-install, then build the public packages:
+Use Node22.23.4/npm10.8.2 or Node24.22.1/npm11.21.1 (the #26 consumer
+matrix; `.nvmrc` selects Node22), initialize submodules, cold install, then build
+the public packages:
 
 ```sh
 npm ci --legacy-peer-deps
@@ -50,8 +51,26 @@ malformed-then-valid isolation and #24 negative controls, then performs real fre
 registry installs and installed `check` builds of scaffold and local-media sites.
 It verifies generated posts/pages/body/draft omission, Yoast title+description,
 three per-occurrence media alts, exact copied PNG bytes and private reports outside
-`dist`. Consumer reinstall uses unchanged package-lock bytes and repeats installed
-resolution/bin checks.
+`dist`, `dist/client` and `dist/server`. Under Astro7/CF14 the exact public
+artifact root is **`dist/client`**, with `dist/server/wrangler.json` and
+`.wrangler/deploy/config.json` required separately. The public URLs remain
+`/blog/first-post/`, `/blog/second-post/` and `/about/`; WordPress permalink and
+query redirects must still target those URLs. No old-dist fallback or template
+rewrite is permitted. Client-file acceptance is **not** Pages deployment approval:
+the existing legacy deployment service rejects this Workers artifact before any
+credentialed process.
+
+The recovery regression first reproduced the old `dist/blog/first-post/index.html`
+ENOENT on unchanged PR42 `fd47544`, after both real external builds succeeded.
+Inspection found the same title/body at `dist/client/blog/first-post/index.html`:
+the bug was the newly reconciled #36 harness's old filesystem root, not a changed
+public route. Seventeen real-artifact negative controls exercise missing routes,
+title/body/page/redirect corruption, SEO metadata loss, three alts, changed media
+bytes, draft route/listing and private-file publication. Restored positives must
+pass after every mutation. Both generated sites are then reinstalled and rebuilt
+from byte-unchanged locks and the same semantic assertions run again. Consumer
+reinstall also uses unchanged package-lock bytes and repeats installed resolution
+and bin checks.
 
 Evidence stays in a unique checkout `.tmp/oss-consumer-*` (`result.json`, raw
 command logs, actual tarballs and their SHA-256 inventories). Installed consumer

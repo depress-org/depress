@@ -4,6 +4,9 @@ import { resolve, join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { runMigrate } from '../packages/cli/dist/commands/migrate.js'
 import { buildSite, defaultSpawn } from '../packages/cli/dist/services/deploy.js'
+import { verifyKeystaticConsumer } from './keystatic-consumer.mjs'
+import { execFileSync } from 'node:child_process'
+import { verifyLocalRuntime } from './local-runtime.mjs'
 
 // Real registry install in a fresh consumer directory. Not a linked fixture,
 // not a deploy adapter, and not a claim of an OS security sandbox.
@@ -31,17 +34,25 @@ const tracedSpawn = async (cmd, args, opts) => {
 }
 await buildSite(site, tracedSpawn)
 assert(!(await lstat(join(site, 'node_modules'))).isSymbolicLink())
+await verifyKeystaticConsumer(site)
+await verifyKeystaticConsumer(site, 'scaffold', await readFile(join(root, 'examples/mamas-blog/keystatic.config.ts'), 'utf8'))
+await verifyLocalRuntime(site, 'workers')
+for (const args of [['audit', '--omit=dev', '--json'], ['audit', '--json']]) {
+  const audit = JSON.parse(execFileSync('npm', args, { cwd: site, encoding: 'utf8' }))
+  assert.equal(audit.metadata.vulnerabilities.total, 0, 'Independent consumer audit is not clean')
+  console.log(JSON.stringify({ audit: args, vulnerabilities: audit.metadata.vulnerabilities }))
+}
 for (const [route, title, marker] of [
   ['blog/first-post', 'First fixture post', 'First body marker alpha.'],
   ['blog/second-post', 'Second fixture post', 'Second body marker beta.'],
   ['about', 'About fixture page', 'Page body marker gamma.'],
 ]) {
-  const html = await readFile(join(site, 'dist', route, 'index.html'), 'utf8')
+  const html = await readFile(join(site, 'dist/client', route, 'index.html'), 'utf8')
   assert(html.includes(title), `${route}: missing title`)
   assert(html.includes(marker), `${route}: missing body`)
 }
-await assert.rejects(lstat(join(site, 'dist/blog/secret-draft/index.html')), { code: 'ENOENT' })
-assert(!(await readFile(join(site, 'dist/blog/index.html'), 'utf8')).includes('Secret fixture draft'))
+await assert.rejects(lstat(join(site, 'dist/client/blog/secret-draft/index.html')), { code: 'ENOENT' })
+assert(!(await readFile(join(site, 'dist/client/blog/index.html'), 'utf8')).includes('Secret fixture draft'))
 const lockPath = join(site, 'package-lock.json')
 const lock = await readFile(lockPath)
 // Reuse the real generated lock: ci reinstalls dependencies; do not resolve ranges twice.

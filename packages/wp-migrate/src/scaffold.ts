@@ -1,5 +1,6 @@
 import { safeWriteFile, assertSafeTree } from './input-boundary.js'
 import { sourceString } from './themes/serialization.js'
+import { SITE_DEPENDENCIES, SITE_DEV_DEPENDENCIES, SITE_ENGINES, SITE_OVERRIDES } from './toolchain.js'
 import type { NavItem } from '@depress-org/core'
 
 
@@ -40,25 +41,10 @@ function genPackageJson(siteTitle: string): string {
         'go-public': "node -e \"const fs=require('fs');fs.writeFileSync('.env',fs.readFileSync('.env','utf8').replace(/PUBLIC_SITE=\\\\S+/,'PUBLIC_SITE=true'));console.log('✅ Site is now public — rebuild to apply.')\"",
         'go-private': "node -e \"const fs=require('fs');fs.writeFileSync('.env',fs.readFileSync('.env','utf8').replace(/PUBLIC_SITE=\\\\S+/,'PUBLIC_SITE=false'));console.log('🔒 Site is now hidden from search engines — rebuild to apply.')\"",
       },
-      dependencies: {
-        '@astrojs/cloudflare': '^10.0.0',
-        '@astrojs/markdoc': '^0.11.0',
-        '@astrojs/react': '^3.6.0',
-        '@astrojs/sitemap': '3.2.1',
-        '@astrojs/tailwind': '^5.1.0',
-        '@keystatic/astro': '^5.0.0',
-        '@keystatic/core': '^0.5.0',
-        astro: '^4.16.0',
-        react: '^18.3.1',
-        'react-dom': '^18.3.1',
-        sharp: '^0.33.4',
-        tailwindcss: '^3.4.1',
-        yaml: '^2.6.0',
-      },
-      devDependencies: {
-        '@types/react': '^18.3.0',
-        '@types/react-dom': '^18.3.0',
-      },
+      engines: SITE_ENGINES,
+      dependencies: SITE_DEPENDENCIES,
+      devDependencies: SITE_DEV_DEPENDENCIES,
+      overrides: SITE_OVERRIDES,
     },
     null,
     2,
@@ -70,44 +56,22 @@ function genAstroConfig(siteUrl: string): string {
   return `import { defineConfig } from 'astro/config'
 import cloudflare from '@astrojs/cloudflare'
 import react from '@astrojs/react'
-import tailwind from '@astrojs/tailwind'
+import tailwind from '@tailwindcss/vite'
 import sitemap from '@astrojs/sitemap'
 import markdoc from '@astrojs/markdoc'
 import keystatic from '@keystatic/astro'
 
-// Astro 4 + Cloudflare's manual chunk split otherwise creates an ESM TDZ
-// between Astro, React and Keystatic in a standalone nested consumer install.
-function fixCircularAstroChunks() {
-  return {
-    name: 'fix-circular-astro-chunks',
-    enforce: 'post',
-    outputOptions(options) {
-      const prev = options.manualChunks
-      return {
-        ...options,
-        manualChunks(id, api) {
-          if (['astro', '@astrojs/react', 'react', 'react-dom', '@keystatic/core', '@keystatic/astro'].some(
-            (name) => id.includes('node_modules/' + name + '/'),
-          )) return 'astro-react-vendor'
-          if (typeof prev === 'function') return prev(id, api)
-        },
-      }
-    },
-  }
-}
-
 export default defineConfig({
-  output: 'hybrid',
-  adapter: cloudflare(),
+  output: 'static',
+  adapter: cloudflare({ prerenderEnvironment: 'node' }),
   site: ${sourceString(url)},
   integrations: [
     react(),
-    tailwind({ applyBaseStyles: false }),
     sitemap(),
     markdoc(),
     keystatic(),
   ],
-  vite: { plugins: [fixCircularAstroChunks()] },
+  vite: { plugins: [tailwind()] },
 })
 `
 }
@@ -156,7 +120,7 @@ function genEnvDts(): string {
 function genContentConfig(hasCategories: boolean, hasTags: boolean): string {
   const collections = [`
 const articles = defineCollection({
-  type: 'content',
+  loader: glob({ pattern: ['**/*.mdoc', '!**/_drafts/**'], base: './src/content/articles' }),
   schema: z.object({
     title: z.string(),
     publishedAt: z.string().optional(),
@@ -170,7 +134,7 @@ const articles = defineCollection({
 })
 
 const pages = defineCollection({
-  type: 'content',
+  loader: glob({ pattern: ['**/*.mdoc', '!**/_drafts/**'], base: './src/content/pages' }),
   schema: z.object({
     title: z.string(),
     seoDescription: z.string().optional(),
@@ -180,7 +144,7 @@ const pages = defineCollection({
   if (hasCategories) {
     collections.push(`
 const categories = defineCollection({
-  type: 'data',
+  loader: glob({ pattern: '**/*.{yaml,yml,json}', base: './src/content/categories' }),
   schema: z.object({
     name: z.string(),
     description: z.string().optional().default(''),
@@ -191,7 +155,7 @@ const categories = defineCollection({
   if (hasTags) {
     collections.push(`
 const tags = defineCollection({
-  type: 'data',
+  loader: glob({ pattern: '**/*.{yaml,yml,json}', base: './src/content/tags' }),
   schema: z.object({
     name: z.string(),
   }),
@@ -203,6 +167,7 @@ const tags = defineCollection({
   if (hasTags) exportParts.push('tags')
 
   return `import { defineCollection, z } from 'astro:content'
+import { glob } from 'astro/loaders'
 ${collections.join('\n')}
 
 export const collections = { ${exportParts.join(', ')} }
@@ -749,7 +714,7 @@ if (homepageType === 'page' && homepageRef) {
           {articles.map((article: any) => (
             <ArticleCard
               title={article.data.title}
-              slug={article.slug}
+              slug={article.id}
               excerpt={article.data.excerpt}
               publishedAt={article.data.publishedAt}
               category={article.data.category}
@@ -770,7 +735,7 @@ function genBlogIndexPage(): string {
   return `---
 import BaseLayout from '../../layouts/BaseLayout.astro'
 import ArticleCard from '../../components/ui/ArticleCard.astro'
-import { getCollection } from 'astro:content'
+import { getCollection, render } from 'astro:content'
 
 const articles = (await getCollection('articles'))
   .filter((a) => !a.id.startsWith('_drafts/'))
@@ -789,7 +754,7 @@ const articles = (await getCollection('articles'))
         {articles.map((article) => (
           <ArticleCard
             title={article.data.title}
-            slug={article.slug}
+            slug={article.id}
             excerpt={article.data.excerpt}
             publishedAt={article.data.publishedAt}
             category={article.data.category}
@@ -808,20 +773,20 @@ const articles = (await getCollection('articles'))
 function genBlogSlugPage(): string {
   return `---
 import BaseLayout from '../../layouts/BaseLayout.astro'
-import { getCollection } from 'astro:content'
+import { getCollection, render } from 'astro:content'
 
 export async function getStaticPaths() {
   const articles = await getCollection('articles')
   return articles
     .filter((a) => !a.id.startsWith('_drafts/'))
     .map((article) => ({
-      params: { slug: article.slug },
+      params: { slug: article.id },
       props: { article },
     }))
 }
 
 const { article } = Astro.props
-const { Content } = await article.render()
+const { Content } = await render(article)
 
 const formattedDate = article.data.publishedAt
   ? new Date(article.data.publishedAt).toLocaleDateString('ru-RU', {
@@ -893,18 +858,18 @@ const formattedDate = article.data.publishedAt
 function genPageSlugPage(): string {
   return `---
 import BaseLayout from '../layouts/BaseLayout.astro'
-import { getCollection } from 'astro:content'
+import { getCollection, render } from 'astro:content'
 
 export async function getStaticPaths() {
   const pages = await getCollection('pages')
   return pages.map((page) => ({
-    params: { slug: page.slug },
+    params: { slug: page.id },
     props: { page },
   }))
 }
 
 const { page } = Astro.props
-const { Content } = await page.render()
+const { Content } = await render(page)
 ---
 
 <BaseLayout title={page.data.title} description={page.data.seoDescription ?? ''}>
@@ -933,7 +898,7 @@ function genCategorySlugPage(): string {
   return `---
 import BaseLayout from '../../layouts/BaseLayout.astro'
 import ArticleCard from '../../components/ui/ArticleCard.astro'
-import { getCollection } from 'astro:content'
+import { getCollection, render } from 'astro:content'
 
 export async function getStaticPaths() {
   const articles = await getCollection('articles')
@@ -962,7 +927,7 @@ const articles = (await getCollection('articles'))
         {articles.map((article) => (
           <ArticleCard
             title={article.data.title}
-            slug={article.slug}
+            slug={article.id}
             excerpt={article.data.excerpt}
             publishedAt={article.data.publishedAt}
             category={article.data.category}
@@ -978,17 +943,9 @@ const articles = (await getCollection('articles'))
 `
 }
 
-function genKeystatiParams(): string {
-  return `---
-export const prerender = false
----
-`
-}
-
 function genGlobalCss(): string {
-  return `@tailwind base;
-@tailwind components;
-@tailwind utilities;
+  return `@import 'tailwindcss';
+@config '../../tailwind.config.mjs';
 
 @layer base {
   :root {
@@ -1053,6 +1010,7 @@ dist/
 .output/
 .vercel/
 .netlify/
+.wrangler/
 
 # dependencies
 node_modules/
@@ -1094,7 +1052,13 @@ npm run build
 
 ## Deploy
 
-Deploy the \`dist/\` folder to **Cloudflare Pages** (connect your GitHub repo for automatic deploys).
+This toolchain targets **Cloudflare Workers**, not Pages. Static assets are in
+\`dist/client\`; the Worker configuration is in \`dist/server/wrangler.json\`.
+The migration CLI's legacy Pages deployment adapter deliberately rejects these
+artifacts. Deployment requires a separately reviewed Workers adapter; this
+compatibility upgrade does not authorize production hosting or publication.
+
+Use Node 22.23.4 / npm 10.8.2 or Node 24.22.1 / npm 11.21.1.
 
 To enable Keystatic in production, update \`keystatic.config.ts\`:
 \`\`\`ts
@@ -1159,13 +1123,17 @@ export default config({
     articles: collection({
       label: 'Articles',
       slugField: 'title',
-      path: 'src/content/articles/*',
+      path: 'src/content/articles/*/',
+      format: { contentField: 'content' },
       entryLayout: 'content',
       schema: {
         title: fields.slug({ name: { label: 'Title' } }),
+        content: fields.markdoc({ label: 'Content' }),
         excerpt: fields.text({ label: 'Excerpt', multiline: true }),
         coverImage: fields.image({ label: 'Cover image', directory: 'public/media' }),
-        publishedAt: fields.datetime({ label: 'Published at', defaultValue: { kind: 'now' } }),
+        publishedAt: fields.text({ label: 'Published at (WordPress date)' }),
+        slug: fields.text({ label: 'Imported slug' }),
+        author: fields.text({ label: 'Author' }),
 ${relationFields}
         seoTitle: fields.text({ label: 'SEO Title' }),
         seoDescription: fields.text({ label: 'SEO Description', multiline: true }),
@@ -1175,10 +1143,17 @@ ${categoriesCollection}${tagsCollection}
     pages: collection({
       label: 'Pages',
       slugField: 'title',
-      path: 'src/content/pages/*',
+      path: 'src/content/pages/*/',
+      format: { contentField: 'content' },
       entryLayout: 'content',
       schema: {
         title: fields.slug({ name: { label: 'Title' } }),
+        content: fields.markdoc({ label: 'Content' }),
+        publishedAt: fields.text({ label: 'Published at (WordPress date)' }),
+        slug: fields.text({ label: 'Imported slug' }),
+        author: fields.text({ label: 'Author' }),
+        excerpt: fields.text({ label: 'Excerpt', multiline: true }),
+        seoTitle: fields.text({ label: 'SEO Title' }),
         seoDescription: fields.text({ label: 'SEO Description', multiline: true }),
       },
     }),
@@ -1301,7 +1276,7 @@ export function scaffoldFiles(opts: ScaffoldOptions): Array<[string, string]> {
     ['src/env.d.ts', genEnvDts()],
     ['src/styles/global.css', genGlobalCss()],
     ['src/data/navigation.json', genNavigationJson(navItems, allMenus)],
-    ['src/content/config.ts', genContentConfig(hasCategories, hasTags)],
+    ['src/content.config.ts', genContentConfig(hasCategories, hasTags)],
     ['site-config.yaml', genSiteConfigYaml({ siteTitle, siteDescription, authorName, navItems, homepageType, homepageRef })],
 
     // Layouts
@@ -1318,7 +1293,6 @@ export function scaffoldFiles(opts: ScaffoldOptions): Array<[string, string]> {
     ['src/pages/robots.txt.ts', genRobotsTxt()],
     ['src/pages/blog/[slug].astro', genBlogSlugPage()],
     ['src/pages/[...slug].astro', genPageSlugPage()],
-    ['src/pages/keystatic/[...params].astro', genKeystatiParams()],
     ...(hasCategories ? [['src/pages/category/[slug].astro', genCategorySlugPage()] as [string, string]] : []),
   ]
 

@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+@config '../../tailwind.config.mjs';
+
+@layer base {
+  :root {
+    --color-bg: #ffffff;
+    --color-surface: #f8f8f8;
+    --color-border: #ebebeb;
+    --color-heading: #111111;
+    --color-body: #374151;
+    --color-muted: #6b7280;
+    --color-link: #2563eb;
+    --color-link-hover: #1d4ed8;
+    --nav-bg: rgba(255, 255, 255, 0.92);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+    --shadow-dropdown: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  [data-theme="dark"] {
+    --color-bg: #0d0d0d;
+    --color-surface: #1c1c1c;
+    --color-border: #2e2e2e;
+    --color-heading: #f0f0f0;
+    --color-body: #c9cdd5;
+    --color-muted: #888888;
+    --color-link: #60a5fa;
+    --color-link-hover: #93c5fd;
+    --nav-bg: rgba(13, 13, 13, 0.92);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-dropdown: 0 8px 28px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-body);
+  }
+}

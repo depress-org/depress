@@ -221,6 +221,80 @@ describe('source inventory and migration reports', () => {
     expect(codes(await inspectMigration(d, m, layout))).toContain('unproven-draft-exclusion')
     expect((await validateMigrationReport(d)).passed).toBe(false)
   })
+  it.each(['draft', 'private'])('inventories deeper physical %s article/page storage independently of source IDs and slugs', async status => {
+    const d = await temp()
+    await scaffoldAstroProject({ siteTitle: 'Fixture', siteDescription: '', siteUrl: 'https://fixture.invalid', authorName: 'alice', navItems: [], hasCategories: false, hasTags: false }, d)
+    await good(d)
+    const m = manifest(item(1) + item(104, 'post', 'original-secret', status) + item(904, 'page', 'original-page', status))
+    for (const collection of ['articles', 'pages']) await put(d, `src/content/${collection}/section/_drafts/deeper/unrelated/index.mdoc`, '---\ntitle: Private\nslug: renamed-public-slug\n---\nPrivate body')
+    const r = await writeMigrationReports(d, m, layout)
+    expect(r.qualityPassed).toBe(true)
+    expect(Object.keys(r.artifacts ?? {})).toContain('src/content/pages/section/_drafts/deeper/unrelated/index.mdoc')
+    expect((await validateMigrationReport(d)).passed).toBe(true)
+    const loader = 'src/content.config.ts', safe = await readFile(join(d, loader), 'utf8')
+    await put(d, loader, safe.replaceAll("['**/*.mdoc', '!**/_drafts/**']", "'**/*.mdoc'"))
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+    const unsafe = await writeMigrationReports(d, m, layout)
+    expect(unsafe.qualityPassed).toBe(false)
+    for (const id of [104, 904]) expect(unsafe.items.find(i => i.id === id)?.findings.map(f => f.code)).toContain('unproven-draft-exclusion')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+    await put(d, loader, safe)
+    expect((await writeMigrationReports(d, m, layout)).qualityPassed).toBe(true)
+    await put(d, 'src/content/pages/section/_drafts/deeper/unrelated/index.mdoc', 'Changed editor bytes')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it.each(['src/content/articles/nested/unknown/index.mdoc', 'src/content/pages/nested/unknown.mdoc', 'src/content/pages/nested/unknown.xhtml', 'public/renamed/deeper/index.html', 'public/renamed/deeper/index.htm', 'public/renamed/deeper/index.xhtml', 'public/renamed/deeper/index.XHTML', 'public/renamed/deeper/index.xHtMl'])('rejects unclaimed public document %s even with no matching private inventory', async path => {
+    const d = await temp(); await good(d)
+    await writeMigrationReports(d, manifest(), layout)
+    await put(d, path, '---\nslug: unrelated\n---\nUnknown source body')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+    const r = await writeMigrationReports(d, manifest(), layout)
+    expect(r.qualityPassed).toBe(false); expect(codes(r)).toContain('untracked-public-output')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it('keeps ordinary safe media and config assets outside the bounded document inventory', async () => {
+    const d = await temp(); await good(d)
+    await writeMigrationReports(d, manifest(), layout)
+    for (const [path, bytes] of [
+      ['public/media/ordinary.png', 'ordinary image fixture'],
+      ['public/media/icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>'],
+      ['public/media/ordinary.pdf', '%PDF-1.4\n% harmless fixture'],
+      ['public/site.webmanifest', '{"name":"Fixture"}'],
+      ['public/config.json', '{"safe":true}'],
+    ]) await put(d, path, bytes)
+    expect((await validateMigrationReport(d)).passed).toBe(true)
+    expect((await writeMigrationReports(d, manifest(), layout)).qualityPassed).toBe(true)
+    expect((await validateMigrationReport(d)).passed).toBe(true)
+  })
+  it.each([undefined, 'src/content/unrelated'])('does not hide active canonical pages when pagesDir is %s', async pagesDir => {
+    const d = await temp()
+    await scaffoldAstroProject({ siteTitle: 'Fixture', siteDescription: '', siteUrl: 'https://fixture.invalid', authorName: 'alice', navItems: [], hasCategories: false, hasTags: false }, d)
+    await good(d)
+    const claimed = { ...layout, pagesDir }
+    const m = manifest()
+    await put(d, 'src/content/pages/a/_drafts/b/index.mdoc', 'Unknown editor page')
+    if (pagesDir === undefined) {
+      expect((await writeMigrationReports(d, m, claimed)).qualityPassed).toBe(true)
+      await put(d, 'src/content/pages/a/_drafts/b/index.mdoc', 'Changed unknown editor page')
+      expect((await validateMigrationReport(d)).passed).toBe(false)
+    }
+    const loader = 'src/content.config.ts', safe = await readFile(join(d, loader), 'utf8')
+    await put(d, loader, safe.replaceAll("['**/*.mdoc', '!**/_drafts/**']", "'**/*.mdoc'"))
+    expect(codes(await writeMigrationReports(d, m, claimed))).toContain('unproven-draft-exclusion')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+    await rm(join(d, 'src/content/pages/a'), { recursive: true })
+    await put(d, 'src/content/pages/unknown/index.mdoc', 'Unknown public page')
+    expect(codes(await writeMigrationReports(d, m, claimed))).toContain('untracked-public-output')
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
+  it('rejects editor trees without any source identity and content symlink aliases', async () => {
+    const d = await temp(); await good(d)
+    await put(d, 'src/content/pages/a/_drafts/b/index.mdoc', 'Unknown private source')
+    expect(codes(await inspectMigration(d, manifest(), layout))).toContain('unproven-draft-exclusion')
+    await rm(join(d, 'src/content/pages'), { recursive: true })
+    await symlink(join(d, 'src/content/articles'), join(d, 'src/content/alias'))
+    expect(codes(await inspectMigration(d, manifest(), { ...layout, pagesDir: 'src/content' }))).toContain('unsafe-path')
+  })
   it.each(['post', 'page'])('rejects private %s flat-file output', async type => {
     const d = await temp(); await good(d)
     const m = manifest(item(2, type, 'secret', 'private'))

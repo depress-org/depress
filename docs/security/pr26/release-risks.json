@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "risks": [
+    { "id": "installed-cli-emulator", "issue": 26, "owner": "depress-lead", "expiresAt": "2026-10-25T00:00:00Z", "status": "unresolved", "mitigation": "Root overrides do not propagate into a separately installed CLI: current Wrangler pins Miniflare/undici7.29.1. Release risk gate and production audit prohibit publication until a patched parent contract or independently reviewed consumer-effective solution; no live credentialed CLI operation authorized. scripts/audit-install-surfaces.mjs retains the nonzero full/production inventory, not a clean-root equivalence claim." },
+    { "id": "root-xmlbuilder", "issue": 24, "owner": "depress-lead", "expiresAt": "2026-10-25T00:00:00Z", "status": "unresolved", "mitigation": "Production dependency audit blocks npm release; no exception or public hosting approval. XMLBuilder advisory remains in root fast-xml-parser4, independent generated consumers have no parser4." },
+    { "id": "default-theme-quality", "issue": 19, "owner": "depress-lead", "expiresAt": "2026-10-25T00:00:00Z", "status": "unresolved", "mitigation": "AstroWind imported pages and Markdown report grammar remain non-green; shared job quality gate rejects done/deploy and release-readiness blocks publication. Compatibility build is not migration acceptance." },
+    { "id": "workers-deployment", "issue": 26, "owner": "depress-lead", "expiresAt": "2026-10-25T00:00:00Z", "status": "unresolved", "mitigation": "CF14 is Workers, not Pages. Pages adapter rejects dist/server or generated Workers deployment config before credential child; no new deployment adapter or credentialed test authorized." },
+    { "id": "hosted-isolation", "issue": 25, "owner": "depress-lead", "expiresAt": "2026-10-25T00:00:00Z", "status": "unresolved", "mitigation": "No public/credentialed hosting or release GO before independent worker-isolation and broader acceptance; release-readiness remains fail-closed. This PR does not approve sibling work." }
+  ]
+}

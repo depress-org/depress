@@ -41,9 +41,9 @@ export async function verifyGeneratedImageEvidence(root, site, layout) {
       const findings = report.items.find(i => i.id === 101).findings
       if (!passed) assert(findings.some(f => f.code === 'inline-alt-mismatch'), `${name}: missing inline-alt finding`)
       execFileSync('npm', ['run', 'build', '--workspaces=false'], { cwd: site, stdio: 'inherit' })
-      const html = readFileSync(join(site, 'dist/blog/first-post/index.html'), 'utf8')
+      const html = readFileSync(join(site, 'dist/client/blog/first-post/index.html'), 'utf8')
       const tags = [...html.matchAll(/<img\b[^>]*>/g)].map(m => m[0]).filter(t => t.includes('src="/media/qa-alt.svg"'))
-      assert.deepEqual(tags.map(t => /\balt="([^"]*)"/.exec(t)?.[1]), renderedAlts, `${name}: actual rendered images differ`)
+      assert.deepEqual(tags.map(t => /\balt="([^"]*)"/.exec(t)?.[1] ?? (/\salt(?=[\s/>])/.test(t) ? '' : undefined)), renderedAlts, `${name}: actual rendered images differ`)
       results.push({ name, qualityPassed: report.qualityPassed, validatorPassed: validation.passed, actualImages: tags, findings })
     }
   } finally {

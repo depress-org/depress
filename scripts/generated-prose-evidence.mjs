@@ -56,7 +56,7 @@ export async function verifyGeneratedProseEvidence(site, layout) {
       assert.equal(validator.passed, passed, `${name}: incorrect validator verdict`)
       if (!passed) assert(findings.some(f => f.code === 'body-text-mismatch'), `${name}: missing body finding`)
       execFileSync('npm', ['run', 'build', '--workspaces=false'], { cwd: site, stdio: 'inherit' })
-      const body = renderedBody(readFileSync(join(site, 'dist/blog/first-post/index.html'), 'utf8'))
+      const body = renderedBody(readFileSync(join(site, 'dist/client/blog/first-post/index.html'), 'utf8'))
       assert.equal(body.text, visible, `${name}: actual body differs (excerpt is NOT evidence)`)
       assert.equal(readFileSync(join(site, 'source-manifest.json'), 'utf8'), manifestBytes)
       results.push({ name, qualityPassed: report.qualityPassed, validatorPassed: validator.passed, body, findings })

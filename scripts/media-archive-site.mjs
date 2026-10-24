@@ -74,14 +74,14 @@ async function verifyAndBuild(job, label) {
   }
   // Adapter/migration IO is disabled in this process. Child install/build is NOT
   // an OS network sandbox; registry access for fresh dependency installation is expected.
-  const html = await readFile(join(site, 'dist/blog/archive-post/index.html'), 'utf8')
+  const html = await readFile(join(site, 'dist/client/blog/archive-post/index.html'), 'utf8')
   assert(html.includes('Archive body marker.'))
   const images = [...html.matchAll(/<img\b[^>]*>/g)].map(m => m[0])
   for (const alt of ['Inline context one', 'Inline context two', 'Attachment fallback']) assert(images.some(image => image.includes(`alt="${alt}"`) && image.includes('/media/photo.png')), `rendered occurrence lost ${alt}`)
-  assert.deepEqual(await readFile(join(site, 'dist/media/photo.png')), photo)
+  assert.deepEqual(await readFile(join(site, 'dist/client/media/photo.png')), photo)
   assert(!html.includes(process.env.PR08_SYNTHETIC_SECRET))
   for (const name of ['source-manifest.json', 'migration-report.json', 'migration-report.md']) {
-    await assert.rejects(readFile(join(site, 'dist', name)))
+    await assert.rejects(readFile(join(site, 'dist/client', name)))
     assert(!(await readFile(join(site, name), 'utf8')).includes(process.env.PR08_SYNTHETIC_SECRET))
   }
   console.log(`PR-08 ${label}: real owner-scoped migration, machine/human report, three rendered alt occurrences, exact built media bytes, private reports PASS`)
