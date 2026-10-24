@@ -107,3 +107,61 @@ export interface WPSiteInfo {
   url: string
   description: string
 }
+
+/** Local, versioned source inventory. Content can contain private source data. */
+export interface SourceItem {
+  key: string
+  id: number
+  type: string
+  status: string
+  slug: string
+  title: string
+  author: string
+  content: string
+  seoTitle?: string
+  seoDescription?: string
+  customFields?: Record<string, string>
+  featuredImageId?: string
+}
+export interface SourceManifest {
+  schemaVersion: 1
+  sourceSha256: string
+  items: SourceItem[]
+  media: WPMedia[]
+}
+export interface ReportLayout {
+  contentDir: string
+  pagesDir?: string
+  fileExt: string
+  useDirectoryEntries: boolean
+  pagesUseDirectoryEntries?: boolean
+}
+export interface ReportFinding { code: string; detail: string }
+export type MigrationOutcome = 'migrated' | 'skipped' | 'unsupported' | 'failed'
+export interface MigrationItem {
+  key: string
+  id: number
+  type: string
+  status: MigrationOutcome
+  sourceStatus: string
+  slug: string
+  outputPath?: string
+  contentSha256?: string
+  findings: ReportFinding[]
+}
+export interface MigrationMedia extends WPMedia {
+  status: MigrationOutcome
+  outputPath?: string
+  contentSha256?: string
+  findings: ReportFinding[]
+}
+export interface MigrationReportV1 {
+  schemaVersion: 1
+  sourceSha256: string
+  layout: ReportLayout
+  items: MigrationItem[]
+  media: MigrationMedia[]
+  qualityPassed: boolean
+  /** SHA-256 snapshots of report-relevant supporting files. */
+  artifacts?: Record<string, string>
+}

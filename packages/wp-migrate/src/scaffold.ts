@@ -1278,13 +1278,10 @@ PUBLIC_SITE=false
 
 // ── Main scaffold function ────────────────────────────────────────────────────
 
-export async function scaffoldAstroProject(
-  opts: ScaffoldOptions,
-  outputDir: string,
-): Promise<void> {
+/** Shared canonical source bytes: the report verifier uses these, never a green label. */
+export function scaffoldFiles(opts: ScaffoldOptions): Array<[string, string]> {
   const { siteTitle, siteDescription, siteUrl, authorName, navItems, allMenus, homepageType, homepageRef, hasCategories, hasTags } = opts
 
-  await assertSafeTree(outputDir)
   const writes: Array<[string, string]> = [
     // Root config files
     ['package.json', genPackageJson(siteTitle)],
@@ -1325,7 +1322,12 @@ export async function scaffoldAstroProject(
     ...(hasCategories ? [['src/pages/category/[slug].astro', genCategorySlugPage()] as [string, string]] : []),
   ]
 
-  for (const [relPath, content] of writes) {
+  return writes
+}
+
+export async function scaffoldAstroProject(opts: ScaffoldOptions, outputDir: string): Promise<void> {
+  await assertSafeTree(outputDir)
+  for (const [relPath, content] of scaffoldFiles(opts)) {
     await safeWriteFile(outputDir, relPath, content)
   }
 }

@@ -50,7 +50,12 @@ describe('#24 actual migration boundary before conversion/fetch/write', () => {
   it('rejects private-host media URL without probing it', async () => {
     await writeFile(input, xml.replace('Local fixture body.</p>', 'Local fixture body.</p><img src="https://127.0.0.1/pic.png">'))
     await expect(run(input, root)).rejects.toThrow()
-    expect(await readdir(root)).toEqual(['export.xml'])
+    // #18 requires a failed-item report after valid inventory/conversion failure.
+    // This is not converted content or a public output, and must stay non-green.
+    expect((await readdir(join(root, 'output'))).sort()).toEqual(['migration-report.json', 'migration-report.md', 'source-manifest.json'])
+    const report = JSON.parse(await readFile(join(root, 'output/migration-report.json'), 'utf8'))
+    expect(report.qualityPassed).toBe(false)
+    expect(report.items.find((i: any) => i.type === 'post').status).toBe('failed')
   })
   it('fails closed for raw upstream command and MDX-only themes', async () => {
     await expect(runWp2md({} as never)).rejects.toThrow('disabled')

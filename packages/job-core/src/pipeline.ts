@@ -96,13 +96,15 @@ async function execute(
     await mkdir(root, { recursive: true })
     const outputDir = await mkdtemp(join(root, 'depress-job-'))
     await update('migrating', { outputDir })
-    await runMigrate({
+    const migration = await runMigrate({
       input: input.wxrPath,
       db: input.sqlDumpPath,
       wpDir: input.mediaDir,
       output: outputDir,
       theme: input.themeId,
     })
+    if (migration?.qualityPassed === false)
+      throw new ServiceError('MIGRATION_QUALITY_FAILED', 'Migration report contains failed or unsupported source items')
     let deployUrl: string | undefined
     if (deployment) {
       const result = await runDeploy({

@@ -10,6 +10,7 @@ export async function transformPosts(
   posts: WPPost[],
   outputDir: string,
   mediaMapping = new Map<string, string>(),
+  attachmentAlts = new Map<string, string>(),
 ): Promise<MigrationReport> {
   for (const type of ['post', 'page']) assertUniqueSegments(posts.filter(p => p.type === type).map(p => p.slug))
   await assertSafeTree(outputDir)
@@ -23,7 +24,12 @@ export async function transformPosts(
   converter.addRule('safe-images', { filter: 'img', replacement: (_text, node) => {
     const src = (node as Element).getAttribute('src') ?? ''
     const dest = mediaMapping.get(src)
-    return dest ? `![image](${encodeURI(dest)})` : ''
+    const inline = (node as Element).getAttribute('alt') ?? ''
+    const alt = inline.trim() ? inline : attachmentAlts.get(src) ?? ''
+    // Keep ordinary source alt exact. Encode syntax-bearing delimiters rather
+    // than creating nodes; unsupported lossy alts remain non-green in reports.
+    const literal = alt.replace(/[\\`*_{}\[\]()!#<>\r\n]/g, char => `&#${char.charCodeAt(0)};`)
+    return dest ? `![${literal}](${encodeURI(dest)})` : ''
   } })
   converter.addRule('iframe-video', { filter: 'iframe', replacement: (_text, node) => {
     const src = (node as Element).getAttribute('src') ?? ''
@@ -49,7 +55,7 @@ export async function transformPosts(
       // Recovered shortcode bodies are literal text, never a second Markdown input.
       const literalMarkers = shortcodeMarkers.map(marker => ({ ...marker, inner: marker.inner.replace(/[\\`*_{}\[\]()!#<>]/g, char => `&#${char.charCodeAt(0)};`) }))
       const markdown = applyShortcodeMarkers(converter.turndown(cleaned), literalMarkers).replace(/</g, '&lt;').replace(/\{/g, '&#123;')
-      const frontmatter = buildFrontmatter(post)
+      const frontmatter = buildFrontmatter(post, markdown)
       const warnBlock = warnings.length > 0
         ? `\n<!-- depress-warnings: ${warnings.join(' | ')} -->\n`
         : ''
@@ -81,7 +87,16 @@ function handleShortcodes(html: string): HandleShortcodesResult {
   if (!html) return { content: '', warnings: [], shortcodeMarkers: [] }
   const warnings: string[] = []
 
-  let out = html
+  // Shortcodes are text syntax, not image/link attribute syntax. Preserve tag
+  // bytes through recovery; Turndown's parsed rules remain the safety boundary.
+  const tags: string[] = []
+  let prefix = 'DEPRESSHTMLTAG'
+  while (html.includes(prefix)) prefix += 'X'
+  let out = html.replace(/<!--[^]*?-->|<\/?[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*>/g, tag => {
+    const marker = `${prefix}${tags.length}M`
+    tags.push(tag)
+    return marker
+  })
 
   // Known recoverable: caption → keep inner content
   out = out.replace(/\[caption[^\]]*\]([\s\S]*?)\[\/caption\]/gi, '$1')
@@ -122,6 +137,9 @@ function handleShortcodes(html: string): HandleShortcodesResult {
     return marker
   })
 
+  const restore = (value: string) => value.replace(new RegExp(`${prefix}(\\d+)M`, 'g'), (marker, index) => tags[Number(index)] ?? marker)
+  out = restore(out)
+  for (const marker of shortcodeMarkers) marker.inner = restore(marker.inner)
   return { content: out, warnings, shortcodeMarkers }
 }
 
@@ -139,7 +157,7 @@ function applyShortcodeMarkers(
   return out
 }
 
-function buildFrontmatter(post: WPPost): string {
+function buildFrontmatter(post: WPPost, markdown: string): string {
   const fields: Record<string, unknown> = {
     title: post.title,
     publishedAt: post.date,
@@ -149,7 +167,10 @@ function buildFrontmatter(post: WPPost): string {
   if (post.categories.length > 0) fields.category = post.categories[0]
   if (post.tags.length > 0) fields.tags = post.tags
   const rawExcerpt = (post.excerpt ?? '').replace(/<[^>]+>/g, '').trim()
-  if (rawExcerpt) fields.excerpt = rawExcerpt
+  // Retain the existing generated-card excerpt when WXR has no explicit one.
+  // This metadata never substitutes for visible body evidence in the report.
+  const firstParagraph = markdown.split('\n').map(line => line.trim()).find(line => line && !/^(?:#|!|---|&lt;!--)/.test(line)) ?? ''
+  fields.excerpt = rawExcerpt || firstParagraph.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/`([^`]+)`/g, '$1').slice(0, 220)
   if (post.seoTitle) fields.seoTitle = post.seoTitle
   if (post.seoDescription) fields.seoDescription = post.seoDescription
   if (post.featuredImageUrl && post.featuredImageUrl.startsWith('/media/')) fields.coverImage = post.featuredImageUrl

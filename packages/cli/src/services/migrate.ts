@@ -21,6 +21,8 @@ import {
   getThemeAdapter,
   listThemes,
   DEFAULT_THEME_ID,
+  createSourceManifest,
+  writeMigrationReports,
 } from '@depress-org/wp-migrate'
 export interface MigrateOptions {
   input?: string
@@ -134,6 +136,7 @@ async function migrate(options: MigrateOptions) {
     )
   }
   validateExportPaths(wpExport)
+  const manifest = createSourceManifest(xmlContent!, wpExport)
   const allMenus = parseNavFromXml(
     xmlContent!,
     wpExport.posts,
@@ -254,11 +257,27 @@ async function migrate(options: MigrateOptions) {
         )
       }
     }
+    // Redirects must ship with the built site, not only the workspace root.
+    await safeWriteFile(outputDir, 'public/redirects.json', JSON.stringify(redirectMap, null, 2) + '\n')
+    await safeWriteFile(outputDir, 'public/_redirects', netlifyRedirects.join('\n') + '\n')
+    const report = await writeMigrationReports(outputDir, manifest, adapter ? {
+      contentDir: adapter.contentDir, pagesDir: adapter.pagesDir, fileExt: adapter.fileExt,
+      useDirectoryEntries: adapter.useDirectoryEntries ?? false,
+    } : { contentDir: 'src/content/articles', pagesDir: 'src/content/pages', fileExt: 'mdoc', useDirectoryEntries: true, pagesUseDirectoryEntries: true })
     return {
       outputDir,
+      reportPath: join(outputDir, 'migration-report.json'),
+      qualityPassed: report.qualityPassed,
       posts: transformResult.postsTransformed,
       pages: transformResult.pagesTransformed,
     }
+  } catch (error) {
+    // A valid source inventory still needs an explicit failed-item report on conversion failure.
+    await writeMigrationReports(outputDir, manifest, adapter ? {
+      contentDir: adapter.contentDir, pagesDir: adapter.pagesDir, fileExt: adapter.fileExt,
+      useDirectoryEntries: adapter.useDirectoryEntries ?? false,
+    } : { contentDir: 'src/content/articles', pagesDir: 'src/content/pages', fileExt: 'mdoc', useDirectoryEntries: true, pagesUseDirectoryEntries: true }).catch(() => {})
+    throw error
   } finally {
     await rm(tmpDir, { recursive: true, force: true })
   }

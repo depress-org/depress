@@ -73,8 +73,17 @@ export async function convertSafeExport(data: WPExport, output: string, wpDir?: 
     await safeWriteFile(output, join('public/media', filename), bytes)
     mapping.set(raw, `/media/${filename}`)
   }
+  const attachmentAlts = new Map<string, string>()
+  for (const { raw, url, filename } of plan) {
+    const candidates = data.media.filter(media => {
+      try { return new URL(media.url, data.siteUrl).pathname.split('/').at(-1) === filename } catch { return false }
+    })
+    // A basename shared by multiple attachments is never an identity proof.
+    if (candidates.length === 1 && candidates[0].altText && new URL(candidates[0].url, data.siteUrl).href === url.href)
+      attachmentAlts.set(raw, candidates[0].altText)
+  }
   const posts = data.posts.map(p => ({ ...p, featuredImageUrl: p.featuredImageUrl ? mapping.get(p.featuredImageUrl) : undefined }))
-  const report = await transformPosts(posts, output, mapping)
+  const report = await transformPosts(posts, output, mapping, attachmentAlts)
   if (report.errors) throw new Error('Content conversion failed')
   return {
     postsTransformed: posts.filter(p => p.type === 'post' && p.status === 'publish').length,

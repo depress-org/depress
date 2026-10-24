@@ -23,6 +23,36 @@ Node 20.20.2 / npm 10.8.2, root `npm ci --legacy-peer-deps`.
 - Actual linked generated scaffold build with normal posts/pages/body/draft checks; second generated build with unusual uploaded titles and shortcode link/media regression; third real Astro build of AstroWind's raw-HTML footer sink. A real cold scaffold registry consumer install/build and unchanged-lock reinstall/rebuild also PASS (`scripts/cold-consumer.mjs`); its counters now explicitly assert two emitted published posts and no retained draft source. Successful builds are not toolchain security acceptance.
 - A separate read-only precommit review found shortcode reinsertion bypass and AstroWind raw-HTML footer risk. Both were corrected and covered by generated-rendering checks; independent final PR review is still required.
 
+## Integration D / #20 reconciliation with report34
+
+Normal merge of reviewed `07d09b8` with actual main `95bab420`; no history rewrite.
+Both pre-conversion path validation and raw source inventory are retained. Native
+conversion keeps author/SEO/category/tag/cover metadata and the generated excerpt;
+the version-1 report verifies actual bodies rather than those metadata fields.
+Inline nonempty alt is retained per occurrence. Only an empty alt with an exact
+URL match and unique attachment basename can use attachment fallback. Delimiter-
+bearing alt that cannot be serialized exactly is safe but truthfully non-green;
+unsupported fields/formats are not silently accepted.
+
+`scaffoldFiles` remains the shared pure canonical generator. Privacy proof parses
+the canonical double-quoted JSON site literal as data, then compares all source
+bytes; it never evaluates source or trusts unknown/changed readers. Scaffold,
+public redirects and report artifacts use the #24 safe writer. Native conversion
+does not emit drafts: generated privacy regression tests explicitly seed editor
+fixtures to retain the prior publication-negative/restore matrix.
+
+Author verification: fresh Node20.20.2/npm10.8.2 root cold install; build/typecheck/
+lint; 418 tests (CLI103/job-core33/bot47/web63/engine172 including pinned Rocket)
+and five unchanged coverage gates; security5; negative99 threshold rejection with
+clean restore. Actual 8body/9image/privacy builds, unusual scaffold and AstroWind
+footer-sink builds, native metadata/ordered-alt/fallback build and report negative/
+restore controls, and 15 compiled scratch/watcher controls pass. A real cold
+registry scaffold install/build and unchanged-lock reinstall/rebuild pass with
+lock SHA-256 `07a04ff080328acd48851cb1b527afe25fa6a6f2daf03caea5624bbc56addfa1`.
+The fresh root install still reports 17 advisories including one critical; this
+is not a clean-audit claim. Integration D independently reviews the final delta
+and exact-head remote checks before any guarded merge.
+
 ## Remaining gates / honest limitations
 
 - #25 owns the disposable-worker filesystem/network/process/CPU/memory/disk/log sandbox and credential separation. Node's portable pathname APIs do not provide descriptor-relative `openat2` containment: checks and `O_NOFOLLOW` mitigate pre-existing malicious paths, but cannot defend against a hostile concurrent process swapping ancestor directories. Run only in a private job-owned tree; no public-hosting safety claim until #25. Input/output roots are trusted service configuration, not user-selected upload fields.
