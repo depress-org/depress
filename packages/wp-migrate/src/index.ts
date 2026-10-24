@@ -6,6 +6,8 @@ export { transformPosts } from './transform.js'
 export { generateKeystaticConfig } from './generate-config.js'
 export { migrateMedia } from './media.js'
 export { rollback } from './rollback.js'
+export { createSourceManifest, inspectMigration, writeMigrationReports, validateMigrationReport } from './report.js'
+export type { SourceItem, SourceManifest, ReportLayout, ReportFinding, MigrationOutcome, MigrationItem, MigrationMedia, MigrationReportV1 } from '@depress-org/core'
 
 // Stage 2: Keystatic transform + Astro scaffold
 export { transformWp2mdOutput } from './keystatic-transform.js'

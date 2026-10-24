@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { validateMigrationReport } from '../packages/wp-migrate/dist/index.js'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, existsSync } from 'node:fs'
 import { resolve, join } from 'node:path'
@@ -11,6 +12,11 @@ const site = join(mkdtempSync(join(root, '.tmp/generated-site-')), 'site')
 const run = (cmd, args, cwd = root) => execFileSync(cmd, args, { cwd, stdio: 'inherit' })
 run(process.execPath, ['packages/cli/dist/index.js', 'migrate', '--input',
   'packages/cli/src/__fixtures__/offline-export.xml', '--output', site, '--theme', 'scaffold'])
+const quality = await validateMigrationReport(site)
+assert(quality.passed, quality.detail)
+const report = JSON.parse(readFileSync(join(site, 'migration-report.json')))
+assert.equal(report.items.filter(i => i.status === 'migrated').length, 3)
+assert.equal(report.items.find(i => i.id === 104).status, 'skipped')
 const pkg = JSON.parse(readFileSync(join(site, 'package.json')))
 const lock = JSON.parse(readFileSync(join(root, 'package-lock.json')))
 for (const name of Object.keys(pkg.dependencies)) {
