@@ -143,6 +143,10 @@ describe('source inventory and migration reports', () => {
       expect((await inspectMigration(d, m, layout)).qualityPassed).toBe(false)
       await rm(join(d, extra))
     }
+    const admin = await readFile(join(d, 'keystatic.config.ts'), 'utf8')
+    await put(d, 'keystatic.config.ts', admin + '\n// unknown integration code')
+    expect((await inspectMigration(d, m, layout)).qualityPassed).toBe(false)
+    await put(d, 'keystatic.config.ts', admin)
     const route = 'src/pages/blog/[slug].astro'
     const original = await readFile(join(d, route), 'utf8')
     await put(d, route, original.replace(".filter((a) => !a.id.startsWith('_drafts/'))", ''))
