@@ -53,3 +53,29 @@ jobs:
       - name: Cold consumer install, actual build and unchanged-lock rebuild (no deploy)
         timeout-minutes: 15
         run: node scripts/cold-consumer.mjs
+
+  oss-packaging:
+    name: OSS packaging and scaffold consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps
+      - name: Build the three public packages
+        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress
+      - name: Real installed CLI and library; default build is measured NO-GO under issue 26
+        run: npm run test:oss-packaging
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oss-packaging-evidence
+          include-hidden-files: true
+          path: |
+            .tmp/oss-consumer-*/result.json
+            .tmp/oss-consumer-*/*.log
