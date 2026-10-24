@@ -176,7 +176,7 @@ describe('source inventory and migration reports', () => {
       await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\nextra: "![Second context](/media/photo.jpg)"\n---\n${body}`)
       expect(codes(await inspectMigration(d, m, layout))).toContain('inline-alt-mismatch')
     }
-    for (const body of ['![First context](/media/photo.jpg)\n![Second context](/media/photo.jpg)', '<!-- ![First context](/media/photo.jpg) -->\n![Second context](/media/photo.jpg)']) {
+    for (const body of ['![First context](/media/photo.jpg)\n![Second context](/media/photo.jpg)']) {
       await put(d, 'src/content/articles/hello/index.mdoc', `---\ntitle: Hello\nauthor: alice\n---\n${body}`)
       // Positive evidence must be an actual image in the Markdoc renderer.
       expect((await writeMigrationReports(d, m, layout)).qualityPassed).toBe(true)
@@ -195,6 +195,7 @@ describe('source inventory and migration reports', () => {
     }
   })
   it.each([
+    '<!-- ![Exact](/media/photo.jpg) -->\n![](/media/photo.jpg)',
     '<!-- <img src="/media/photo.jpg" alt="Exact"> -->\n![](/media/photo.jpg)',
     '\\![Exact](/media/photo.jpg)\n![](/media/photo.jpg)',
     '<img src="/media/photo.jpg" alt="Exact">',

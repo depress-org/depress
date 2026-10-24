@@ -20,8 +20,8 @@ export async function verifyGeneratedImageEvidence(root, site, layout) {
   try {
     for (const [name, body, sourceAlts, renderedAlts, passed] of [
       ['correct', md('Important inline alt'), ['Important inline alt'], ['Important inline alt'], true],
-      // Markdoc escapes HTML delimiters, but Markdown inside them is rendered.
-      ['comment-markdown-rendered', '<!-- ' + md('Important inline alt') + ' -->\n' + md(''), ['Important inline alt'], ['Important inline alt', ''], true],
+      // Astro enables allowComments: even Markdown inside comments is stripped.
+      ['comment-markdown', '<!-- ' + md('Important inline alt') + ' -->\n' + md(''), ['Important inline alt'], [''], false],
       ['comment-html', '<!-- <img src="/media/qa-alt.svg" alt="Important inline alt"> -->\n' + md(''), ['Important inline alt'], [''], false],
       ['escaped-markdown', '\\' + md('Important inline alt') + '\n' + md(''), ['Important inline alt'], [''], false],
       ['html-only', '<img src="/media/qa-alt.svg" alt="Important inline alt">', ['Important inline alt'], [], false],

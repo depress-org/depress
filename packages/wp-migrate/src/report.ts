@@ -109,12 +109,13 @@ function sourceImages(value: string): ImageEvidence[] {
 }
 
 // Parse the same Markdoc grammar as the generated .mdoc renderer. HTML is text
-// there, and escaped Markdown/code/comments must never supply image evidence.
+// there; Astro enables allowComments to strip HTML comments before parsing.
 // No transform/resolve: dynamic tags/annotations/custom formats are unproven.
 function images(value: string, fileExt: string): ImageEvidence[] {
   if (fileExt !== 'mdoc') return []
   try {
-    const nodes = [...Markdoc.parse(value).walk()]
+    const tokenizer = new Markdoc.Tokenizer({ allowComments: true })
+    const nodes = [...Markdoc.parse(tokenizer.tokenize(value)).walk()]
     if (nodes.some(node => node.type === 'tag' || node.errors.length || node.annotations.length)) return []
     return nodes.filter(node => node.type === 'image')
       .filter(node => typeof node.attributes.src === 'string' && typeof node.attributes.alt === 'string')
