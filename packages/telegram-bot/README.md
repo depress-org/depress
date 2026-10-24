@@ -36,7 +36,15 @@ read/network side effects. Options:
   and separately for each send/ack. Native abort plus a deadline also bounds clients
   that ignore cancellation. Downloads require HTTP success and reject redirects.
 - `sessionTtlMs`: 30 minutes default for abandoned SQL/theme-waiting uploads.
-- `store`/`sessions`: optional isolated local dependencies for tests/embedding.
+- `store`: optional trusted root repository implementing `forOwner(ownerId): JobStore`,
+  not a pre-scoped store. Only after the private/allowlisted sender guard does the
+  adapter acquire `forOwner("telegram:" + ctx.from.id)` from Telegram's sender
+  metadata (never callback/file contents). That same capability handles job creation
+  and is captured through async execution into `runJob`; another user's activity or
+  `/start` cannot switch a running job's owner. Core denies foreign get/update,
+  filters lists by owner and rejects ownership changes. There is no anonymous or
+  shared-owner fallback. In-memory storage is per process, not durable isolation.
+- `sessions`: optional isolated local session store for tests/embedding.
 
 For manually approved local execution, the executable requires
 `TELEGRAM_ALLOWED_USER_IDS` (comma-separated positive IDs) and
@@ -73,7 +81,9 @@ this adapter removes its input directories, not retained output sites.
 `npm test -w packages/telegram-bot` runs the actual grammy middleware/command/document/
 callback adapter against synthetic updates and an intercepted API transformer.
 Fetch is mocked, file IO failure cases are mocked, and contained real workspace
-files independently verify filename containment and cleanup. No tests read a real
+files independently verify filename containment and cleanup. Two allowed users run
+concurrently against the real scoped store: foreign reads/update/list isolation,
+immutable ownership and exact async capability identity are asserted. No tests read a real
 token or contact Telegram/cloud providers. `npm run test:coverage -w
 packages/telegram-bot` is required by the root runner, with gates 85/70/85/85 for
 statements/branches/functions/lines. Existing other-workspace gates are unchanged.

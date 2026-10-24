@@ -57,7 +57,61 @@ describe('real grammy adapter, offline API transport', () => {
   it('fails closed without access config; rejects groups and other senders before any IO', async () => {
     setup({ allowedUserIds: [] }); await update('doc', 'x.xml'); expect(calls).toEqual([])
     setup(); await update('doc', 'x.xml', 43); await update('doc', 'x.xml', 42, 'group'); await update('callback', 'theme:scaffold', 43)
-    expect(calls).toEqual([]); expect(fetchMock).not.toHaveBeenCalled(); expect(await readdir(root)).toEqual([])
+    expect(calls).toEqual([]); expect(fetchMock).not.toHaveBeenCalled(); await expect.poll(() => readdir(root)).toEqual([])
+  })
+  it('acquires no owner capability for unauthenticated, mismatched or non-private actors', async () => {
+    const forOwner = vi.fn(() => { throw new Error('must not acquire') })
+    setup({ store: { forOwner }, allowedUserIds: [42, 43] })
+    await update('start', '', 44); await update('doc', 'x.xml', 42, 'group')
+    await update('callback', `theme:${crypto.randomUUID()}:scaffold`, 44)
+    await bot.handleUpdate({ update_id: ++id, message: { message_id: id, date: 0, chat: { id: 43, type: 'private' }, from: { id: 42, is_bot: false, first_name: 'test' }, text: '/start', entities: [{ type: 'bot_command', offset: 0, length: 6 }] } } as any)
+    expect(forOwner).not.toHaveBeenCalled(); expect(calls).toEqual([]); expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('scopes the default root repository without an injected store or anonymous fallback', async () => {
+    setup({ store: undefined })
+    await update('callback', await ready())
+    await expect.poll(() => readdir(root)).toEqual([])
+    const [scope, jobId] = vi.mocked(runJob).mock.calls[0]
+    expect(scope.ownerId).toBe('telegram:42')
+    expect((await scope.get(jobId))!.ownerId).toBe('telegram:42')
+    expect((await scope.get(jobId))!.status).toBe('done')
+  })
+  it('keeps two allowed users isolated through concurrent asynchronous job execution', async () => {
+    setup({ allowedUserIds: [42, 43] })
+    const forOwner = vi.spyOn(store, 'forOwner')
+    const gates = new Map<string, ReturnType<typeof deferred<void>>>()
+    const capabilities = new Map<string, import('@depress-org/job-core').JobStore>()
+    vi.mocked(runJob).mockImplementation(async (scope, jobId) => {
+      capabilities.set(scope.ownerId, scope)
+      const gate = deferred<void>(); gates.set(scope.ownerId, gate)
+      await gate.promise
+      return scope.update(jobId, { status: 'done' })
+    })
+    const a = await ready()
+    await update('doc', 'b.xml', 43); await update('skip', '', 43); const b = callback()
+    await update('callback', a, 43) // A's keyboard is not B's session generation.
+    expect(runJob).not.toHaveBeenCalled()
+    await update('callback', a); await update('callback', b, 43); await tick()
+    expect(runJob).toHaveBeenCalledTimes(2)
+    expect(forOwner.mock.calls.map(([owner]) => owner)).toEqual(['telegram:43', 'telegram:42', 'telegram:43'])
+    const ownerA = store.forOwner('telegram:42'), ownerB = store.forOwner('telegram:43')
+    expect(capabilities.get('telegram:42')).toBe(ownerA); expect(capabilities.get('telegram:43')).toBe(ownerB)
+    const [jobA] = await ownerA.list(), [jobB] = await ownerB.list()
+    expect(jobA.ownerId).toBe('telegram:42'); expect(jobB.ownerId).toBe('telegram:43')
+    expect(jobA.id).not.toBe(jobB.id)
+    expect(await ownerA.get(jobB.id)).toBeUndefined(); expect(await ownerB.get(jobA.id)).toBeUndefined()
+    await expect(ownerA.update(jobB.id, { status: 'failed' })).rejects.toThrow('Job not found')
+    await expect(ownerB.update(jobA.id, { status: 'failed' })).rejects.toThrow('Job not found')
+    await expect(ownerA.update(jobA.id, { ownerId: 'telegram:43' } as any)).rejects.toThrow('Immutable')
+    ;(jobA as any).ownerId = 'forged' // Returned snapshots cannot mutate stored ownership.
+    expect((await ownerA.get(jobA.id))!.ownerId).toBe('telegram:42')
+    await update('start'); await update('doc', 'replacement.xml')
+    gates.get('telegram:43')!.resolve(); await tick(); gates.get('telegram:42')!.resolve(); await tick(); await tick()
+    expect((await ownerA.get(jobA.id))!.status).toBe('done'); expect((await ownerB.get(jobB.id))!.status).toBe('done')
+    expect((await ownerA.list()).map(job => job.id)).toEqual([jobA.id]); expect((await ownerB.list()).map(job => job.id)).toEqual([jobB.id])
+    expect(sessions.get('42:42').stage).toBe('awaiting_sql'); expect(sessions.get('43:43').stage).toBe('idle')
+    expect(await readdir(root)).toHaveLength(1)
+    await update('start'); await expect.poll(() => readdir(root)).toEqual([])
   })
   it.each(['../../escape.xml', '/absolute.xml', '..\\windows.xml', 'odd 🦌.XML'])('generates contained role filename for %s', async name => {
     await update('doc', name)
@@ -76,16 +130,16 @@ describe('real grammy adapter, offline API transport', () => {
     if (failure === 'http') fetchMock.mockResolvedValue(new Response('error', { status: 403 }))
     if (failure === 'content') fetchMock.mockResolvedValue(new Response('not WXR'))
     if (failure === 'oversize') setup({ maxUploadBytes: 8 })
-    await update('doc', 'x.xml'); expect(await readdir(root)).toEqual([]); expect(text()).not.toContain('sensitive'); expect(text()).not.toContain('token must')
+    await update('doc', 'x.xml'); await expect.poll(() => readdir(root)).toEqual([]); expect(text()).not.toContain('sensitive'); expect(text()).not.toContain('token must')
     apiFailure = ''; fetchMock.mockImplementation(async () => new Response(wxr)); setup(); await update('doc', 'x.xml'); expect(text()).toContain('/skip')
   })
   it('bounds streamed bytes even without content-length', async () => {
     setup({ maxUploadBytes: 200 }); fetchMock.mockResolvedValue(new Response('x'.repeat(201)))
-    await update('doc', 'x.xml'); expect(await readdir(root)).toEqual([])
+    await update('doc', 'x.xml'); await expect.poll(() => readdir(root)).toEqual([])
   })
   it('times out a hung getFile or fetch and cleans the owned directory', async () => {
-    setup({ ioTimeoutMs: 10 }); apiGate = deferred(); await update('doc', 'x.xml'); expect(await readdir(root)).toEqual([])
-    apiGate = undefined; fetchMock.mockImplementation(() => new Promise(() => {})); await update('doc', 'x.xml'); expect(await readdir(root)).toEqual([])
+    setup({ ioTimeoutMs: 10 }); apiGate = deferred(); await update('doc', 'x.xml'); await expect.poll(() => readdir(root)).toEqual([])
+    apiGate = undefined; fetchMock.mockImplementation(() => new Promise(() => {})); await update('doc', 'x.xml'); await expect.poll(() => readdir(root)).toEqual([])
   })
   it('rejects SQL content with XML or binary data and permits a real SQL dump', async () => {
     await update('doc', 'x.xml'); fetchMock.mockResolvedValue(new Response(wxr)); await update('doc', 'dump.sql')
@@ -107,7 +161,7 @@ describe('real grammy adapter, offline API transport', () => {
   it('does not let a late download clobber /start and cleans its stale directory', async () => {
     apiGate = deferred(); const uploading = update('doc', 'x.xml'); await tick(); await update('start')
     apiGate.resolve({ ok: true, result: { file_path: 'documents/file.xml' } }); await uploading
-    expect(await readdir(root)).toEqual([]); apiGate = undefined; await update('doc', 'x.xml'); expect(text()).toContain('/skip')
+    await expect.poll(() => readdir(root)).toEqual([]); apiGate = undefined; await update('doc', 'x.xml'); expect(text()).toContain('/skip')
   })
   it('cleans terminal uploads despite rejected sends and leaves a newer /start intact', async () => {
     const jobGate = deferred<any>(); let progress: any; let job: any
@@ -119,11 +173,11 @@ describe('real grammy adapter, offline API transport', () => {
   it.each(['resolved-failed', 'rejected', 'done'])('always cleans after %s with rejected queued/progress/terminal delivery', async terminal => {
     const cb = await ready(); apiFailure = 'sendMessage'
     vi.mocked(runJob).mockImplementation(async (s, jobId, opts) => { const job = (await s.get(jobId))!; await opts!.onProgress!({ ...job, status: 'migrating' }); if (terminal === 'rejected') throw new Error('raw secret'); return { ...job, status: terminal === 'done' ? 'done' : 'failed' } })
-    await update('callback', cb); await tick(); await tick(); expect(await readdir(root)).toEqual([])
+    await update('callback', cb); await tick(); await tick(); await expect.poll(() => readdir(root)).toEqual([])
     apiFailure = ''; await update('doc', 'new.xml'); expect(text()).toContain('/skip')
   })
   it('reports migrate-only artifacts truthfully, without invented live/repository URLs', async () => {
-    const cb = await ready(); await update('callback', cb); await tick(); expect(text()).toContain('Local artifact:'); expect(text()).not.toContain('Live URL:'); expect(text()).not.toContain('Repo:'); expect(await readdir(root)).toEqual([])
+    const cb = await ready(); await update('callback', cb); await tick(); expect(text()).toContain('Local artifact:'); expect(text()).not.toContain('Live URL:'); expect(text()).not.toContain('Repo:'); await expect.poll(() => readdir(root)).toEqual([])
   })
   it('reports only a returned live URL', async () => {
     vi.mocked(runJob).mockImplementation(async (s, jobId) => ({ ...(await s.get(jobId))!, status: 'done', deployUrl: 'https://fixture.invalid', repoPath: '.tmp/local' }))
@@ -131,34 +185,34 @@ describe('real grammy adapter, offline API transport', () => {
   })
   it.each(['mkdir', 'mkdtemp', 'writeFile'] as const)('recovers from mocked file IO %s rejection', async method => {
     vi.spyOn(uploadIO, method).mockRejectedValueOnce(new Error('private filesystem error'))
-    await update('doc', 'x.xml'); expect(text()).toContain('Upload failed'); expect(text()).not.toContain('private filesystem'); expect(await readdir(root)).toEqual([])
+    await update('doc', 'x.xml'); expect(text()).toContain('Upload failed'); expect(text()).not.toContain('private filesystem'); await expect.poll(() => readdir(root)).toEqual([])
     await update('doc', 'x.xml'); expect(text()).toContain('/skip')
   })
   it('accepts a valid callback even if its acknowledgement rejects', async () => {
-    const cb = await ready(); apiFailure = 'answerCallbackQuery'; await update('callback', cb); await tick(); expect(runJob).toHaveBeenCalledTimes(1); expect(await readdir(root)).toEqual([])
+    const cb = await ready(); apiFailure = 'answerCallbackQuery'; await update('callback', cb); expect(runJob).toHaveBeenCalledTimes(1); await expect.poll(() => readdir(root)).toEqual([])
   })
   it('cleans the prior upload when /start abandons a theme keyboard', async () => {
-    await ready(); await update('start'); expect(await readdir(root)).toEqual([])
+    await ready(); await update('start'); await expect.poll(() => readdir(root)).toEqual([])
   })
   it.each(['<rss><channel>', '<rss><channel/></rss>', '<!DOCTYPE rss [<!ENTITY x "bad">]><rss/>', '\u0000binary'])('rejects malformed, non-WXR, declaration or binary XML', async body => {
-    fetchMock.mockResolvedValue(new Response(body)); await update('doc', 'x.xml'); expect(await readdir(root)).toEqual([]); expect(text()).toContain('Upload failed')
+    fetchMock.mockResolvedValue(new Response(body)); await update('doc', 'x.xml'); await expect.poll(() => readdir(root)).toEqual([]); expect(text()).toContain('Upload failed')
   })
   it('rejects an excessive content-length before consuming the body', async () => {
-    fetchMock.mockResolvedValue(new Response(wxr, { headers: { 'content-length': '999999999' } })); await update('doc', 'x.xml'); expect(await readdir(root)).toEqual([])
+    fetchMock.mockResolvedValue(new Response(wxr, { headers: { 'content-length': '999999999' } })); await update('doc', 'x.xml'); await expect.poll(() => readdir(root)).toEqual([])
   })
   it('does not expire inputs while an actual job promise is still active', async () => {
     setup({ sessionTtlMs: 30 }); const gate = deferred<any>(); let job: any
     vi.mocked(runJob).mockImplementation(async (s, jobId) => { job = await s.get(jobId); return gate.promise })
     await update('callback', await ready()); await new Promise(r => setTimeout(r, 60)); expect(await readdir(root)).toHaveLength(1)
-    gate.resolve({ ...job, status: 'failed' }); await tick(); expect(await readdir(root)).toEqual([])
+    gate.resolve({ ...job, status: 'failed' }); await tick(); await expect.poll(() => readdir(root)).toEqual([])
   })
   it.each(['terminal', 'expiry'])('retries a transient cleanup failure on %s', async when => {
     if (when === 'expiry') setup({ sessionTtlMs: 15 })
     const cb = await ready(); const removal = vi.spyOn(uploadIO, 'rm').mockRejectedValueOnce(new Error('transient disk error'))
     if (when === 'terminal') await update('callback', cb)
-    await new Promise(r => setTimeout(r, 60)); expect(await readdir(root)).toEqual([]); expect(removal.mock.calls.length).toBeGreaterThanOrEqual(2)
+    await new Promise(r => setTimeout(r, 60)); await expect.poll(() => readdir(root)).toEqual([]); expect(removal.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
   it('expires abandoned uploads without deleting active job inputs', async () => {
-    setup({ sessionTtlMs: 15 }); await update('doc', 'x.xml'); await new Promise(r => setTimeout(r, 50)); expect(await readdir(root)).toEqual([])
+    setup({ sessionTtlMs: 15 }); await update('doc', 'x.xml'); await new Promise(r => setTimeout(r, 50)); await expect.poll(() => readdir(root)).toEqual([])
   })
 })

@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard } from 'grammy'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { InMemoryJobStore, type JobStore } from '@depress-org/job-core'
+import { InMemoryJobStore } from '@depress-org/job-core'
 import { SessionStore } from './session.js'
 import { Handlers, themeKeyboardLabels, type BotPort } from './handlers.js'
 import { deadline, Uploads } from './uploads.js'
@@ -14,7 +14,8 @@ export interface BotOptions {
   ioTimeoutMs?: number
   sessionTtlMs?: number
   sessions?: SessionStore
-  store?: JobStore
+  /** Trusted root repository; never inject a single shared owner scope. */
+  store?: Pick<InMemoryJobStore, 'forOwner'>
 }
 function positive(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid ${name}`)
@@ -47,7 +48,8 @@ export function createBot(token: string, options: BotOptions = {}) {
       await deadline(timeout, signal => bot.api.sendMessage(chatId, 'Pick a theme:', { reply_markup: keyboard }, telegramSignal(signal)))
     },
   }
-  const handlers = new Handlers({ bot: port, sessions: options.sessions ?? new SessionStore(), store: options.store ?? new InMemoryJobStore(), sessionTtlMs: positive(options.sessionTtlMs ?? 30 * 60_000, 'sessionTtlMs') })
+  const store = options.store ?? new InMemoryJobStore()
+  const handlers = new Handlers({ bot: port, sessions: options.sessions ?? new SessionStore(), sessionTtlMs: positive(options.sessionTtlMs ?? 30 * 60_000, 'sessionTtlMs') })
   // This guard runs before commands, callbacks, getFile, downloads, sends and session allocation.
   bot.use(async (ctx, next) => {
     if (!ctx.from || ctx.from.is_bot || ctx.chat?.type !== 'private' || ctx.chat.id !== ctx.from.id || !allowed.has(ctx.from.id)) return
@@ -60,7 +62,9 @@ export function createBot(token: string, options: BotOptions = {}) {
   bot.callbackQuery(/^theme:([a-f0-9-]{36}):([\w-]+)$/, async ctx => {
     // Callback acknowledgement is best-effort, bounded, and cannot gate a valid action.
     try { await deadline(timeout, signal => ctx.answerCallbackQuery({}, telegramSignal(signal))) } catch { /* no raw provider errors */ }
-    await handlers.theme(key(ctx.chat!.id, ctx.from.id), ctx.chat!.id, ctx.match[1], ctx.match[2])
+    // Telegram supplies sender identity; client callback data never chooses the owner.
+    const scope = store.forOwner(`telegram:${ctx.from.id}`)
+    await handlers.theme(key(ctx.chat!.id, ctx.from.id), ctx.chat!.id, ctx.match[1], ctx.match[2], scope)
   })
   bot.catch(() => { console.error('Bot update failed; raw provider details suppressed.') })
   return bot

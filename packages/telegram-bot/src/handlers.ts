@@ -10,7 +10,7 @@ export interface BotPort {
   sendMessage(chatId: number, text: string): Promise<void>
   sendThemeKeyboard(chatId: number, generation: string): Promise<void>
 }
-export interface Deps { bot: BotPort; store: JobStore; sessions: SessionStore; sessionTtlMs: number }
+export interface Deps { bot: BotPort; sessions: SessionStore; sessionTtlMs: number }
 
 /** All actions are actor-scoped and every continuation checks the same state identity. */
 export class Handlers {
@@ -72,8 +72,8 @@ export class Handlers {
     state.stage = 'awaiting_theme'; this.expire(key, state)
     await this.safe(() => this.deps.bot.sendThemeKeyboard(chatId, state.generation))
   }
-  async theme(key: string, chatId: number, generation: string, themeId: string) {
-    const { bot, sessions, store } = this.deps
+  async theme(key: string, chatId: number, generation: string, themeId: string, store: JobStore) {
+    const { bot, sessions } = this.deps
     const state = sessions.get(key)
     if (state.stage !== 'awaiting_theme' || generation !== state.generation || !isValidTheme(themeId)) return
     state.stage = 'starting'; this.clear(key) // suppress concurrent callbacks before async create
@@ -83,15 +83,15 @@ export class Handlers {
       state.stage = 'running'; state.jobId = job.id
       // Own the promise, including terminal notification and cleanup. Observer callbacks
       // are best-effort only; the typed runJob return is the terminal authority.
-      void this.execute(key, chatId, state, job.id).catch(() => {})
+      void this.execute(key, chatId, state, job.id, store).catch(() => {})
     } catch {
       const replacement = this.current(key, state) ? sessions.reset(key) : undefined
       await this.safe(() => bot.cleanup(state.uploadDir))
       if (replacement && this.current(key, replacement)) await this.safe(() => bot.sendMessage(chatId, 'Unable to queue migration. Send /start.'))
     }
   }
-  private async execute(key: string, chatId: number, state: ChatState, jobId: string) {
-    const { bot, sessions, store } = this.deps
+  private async execute(key: string, chatId: number, state: ChatState, jobId: string, store: JobStore) {
+    const { bot, sessions } = this.deps
     const active = () => this.current(key, state) && state.jobId === jobId && state.stage === 'running'
     // Ordered, bounded delivery; each queued operation rechecks identity at send time.
     let delivery = Promise.resolve()
