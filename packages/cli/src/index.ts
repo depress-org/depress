@@ -31,7 +31,20 @@ program
   .option('-t, --theme <id>', 'Astro theme (default: astrowind | scaffold for Keystatic-only | rocket|brook|daisyui|mainline|small-biz)', 'astrowind')
   .action(async (options) => {
     const { runMigrate } = await import('./commands/migrate.js')
-    await runMigrate(options)
+    const { existsSync } = await import('node:fs')
+    const { readdir } = await import('node:fs/promises')
+    const { default: inquirer } = await import('inquirer')
+    if (!options.input) {
+      const answer = await inquirer.prompt([{ type: 'input', name: 'input', message: 'WordPress XML export path:' }])
+      options.input = answer.input
+    }
+    if (existsSync(options.output) && (await readdir(options.output)).length) {
+      const { overwrite } = await inquirer.prompt([{ type: 'confirm', name: 'overwrite', message: 'Output is not empty. Overwrite?', default: false }])
+      if (!overwrite) return
+      options.overwrite = true
+    }
+    const result = await runMigrate(options)
+    console.log(`Migration complete: ${result.outputDir}`)
   })
 
 program
@@ -64,7 +77,10 @@ program
   .option('--project-name <name>', 'Project/site name for the deploy target')
   .action(async (options) => {
     const { runDeploy } = await import('./commands/deploy.js')
-    await runDeploy(options)
+    const keys: Record<string, string> = { 'cloudflare-pages': 'CLOUDFLARE_API_TOKEN', netlify: 'NETLIFY_AUTH_TOKEN', vercel: 'VERCEL_TOKEN' }
+    const envKey = keys[options.target]
+    const result = await runDeploy({ ...options, token: options.token ?? (envKey ? process.env[envKey] : undefined) })
+    console.log(`Deployment complete: ${result.deployUrl}`)
   })
 
 program
@@ -76,4 +92,7 @@ program
     await runCheck(options)
   })
 
-program.parse()
+program.parseAsync().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : 'Command failed')
+  process.exitCode = 1
+})
