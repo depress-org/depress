@@ -53,3 +53,29 @@ jobs:
       - name: Cold consumer install, actual build and unchanged-lock rebuild (no deploy)
         timeout-minutes: 15
         run: node scripts/cold-consumer.mjs
+
+  toolchain-consumers:
+    name: Patched consumers Node ${{ matrix.node }} npm ${{ matrix.npm }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: '22.23.4'
+            npm: '10.8.2'
+          - node: '24.22.1'
+            npm: '11.21.1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm install --global npm@${{ matrix.npm }}
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps
+      - run: npm run build && npm run typecheck && npm test
+      - name: Cold scaffold and complete default theme, CMS/media/runtime/audits and unchanged-lock rebuilds
+        run: node scripts/cold-consumer.mjs && node scripts/default-consumer.mjs

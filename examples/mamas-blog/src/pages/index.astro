@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro'
 import ArticleCard from '../components/ui/ArticleCard.astro'
-import { getCollection } from 'astro:content'
+import { getCollection, render } from 'astro:content'
 
 const articles = (await getCollection('articles'))
   .sort(
@@ -32,7 +32,7 @@ const articles = (await getCollection('articles'))
           {articles.map((article) => (
             <ArticleCard
               title={article.data.title}
-              slug={article.slug}
+              slug={article.id}
               excerpt={article.data.excerpt}
               publishedAt={article.data.publishedAt}
               category={article.data.category}

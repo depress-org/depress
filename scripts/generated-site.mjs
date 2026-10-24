@@ -33,12 +33,12 @@ for (const [route, title, marker] of [
   ['blog/second-post', 'Second fixture post', 'Second body marker beta.'],
   ['about', 'About fixture page', 'Page body marker gamma.'],
 ]) {
-  const html = readFileSync(join(site, 'dist', route, 'index.html'), 'utf8')
+  const html = readFileSync(join(site, 'dist/client', route, 'index.html'), 'utf8')
   assert(html.includes(title), `${route}: missing title`)
   assert(html.includes(marker), `${route}: missing rendered body`)
 }
-assert(!existsSync(join(site, 'dist/blog/secret-draft/index.html')), 'Draft leaked into public routes')
-const blog = readFileSync(join(site, 'dist/blog/index.html'), 'utf8')
+assert(!existsSync(join(site, 'dist/client/blog/secret-draft/index.html')), 'Draft leaked into public routes')
+const blog = readFileSync(join(site, 'dist/client/blog/index.html'), 'utf8')
 assert(!blog.includes('Secret fixture draft'), 'Draft leaked into listing')
 // Actual built false-green reproductions: intentionally copy a nonpublic source
 // to the public collection. Both statuses must fail fresh reports and validators,
@@ -47,7 +47,7 @@ const manifest = JSON.parse(readFileSync(join(site, 'source-manifest.json')))
 // Native #24 deliberately emits no drafts. Seed the same explicit editor-store
 // fixture to retain report34's canonical-reader publication negative controls.
 mkdirSync(join(site, 'src/content/articles/_drafts/secret-draft'), { recursive: true })
-writeFileSync(join(site, 'src/content/articles/_drafts/secret-draft/index.mdoc'), '---\ntitle: Secret fixture draft\nauthor: fixture-author\n---\nDraft body marker excluded.')
+writeFileSync(join(site, 'src/content/articles/_drafts/secret-draft/index.mdoc'), '---\ntitle: Secret fixture draft\nslug: editor-leak\nauthor: fixture-author\n---\nDraft body marker excluded.')
 const editor = readFileSync(join(site, 'src/content/articles/_drafts/secret-draft/index.mdoc'), 'utf8')
 for (const status of ['draft', 'private']) {
   const slug = `secret-${status}`
@@ -55,16 +55,28 @@ for (const status of ['draft', 'private']) {
   Object.assign(changed.items.find(i => i.id === 104), { status, slug })
   const path = join(site, 'src/content/articles', slug)
   mkdirSync(path, { recursive: true })
-  writeFileSync(join(path, 'index.mdoc'), editor)
+  writeFileSync(join(path, 'index.mdoc'), editor.replace('slug: editor-leak\n', ''))
   const negative = await writeMigrationReports(site, changed, report.layout)
   assert.equal(negative.qualityPassed, false, `${status} public collection leak was accepted`)
   assert(negative.items.find(i => i.id === 104).findings.some(f => f.code === 'nonpublic-output'))
   assert.equal((await validateMigrationReport(site)).passed, false)
   run('npm', ['run', 'build', '--workspaces=false'], site)
-  assert(existsSync(join(site, 'dist/blog', slug, 'index.html')), 'Negative control did not actually publish')
-  assert(readFileSync(join(site, 'dist/blog/index.html'), 'utf8').includes('Secret fixture draft'))
+  assert(existsSync(join(site, 'dist/client/blog', slug, 'index.html')), 'Negative control did not actually publish')
+  assert(readFileSync(join(site, 'dist/client/blog/index.html'), 'utf8').includes('Secret fixture draft'))
   rmSync(path, { recursive: true })
 }
+// At Astro7's loader boundary, slug frontmatter overrides the generated id.
+// Canonical source proof must reject a loader that admits the editor directory,
+// and the real build must demonstrate why the old route-only predicate is unsafe.
+const loaderPath = join(site, 'src/content.config.ts')
+const safeLoader = readFileSync(loaderPath, 'utf8')
+writeFileSync(loaderPath, safeLoader.replaceAll("['**/*.mdoc', '!**/_drafts/**']", "'**/*.mdoc'"))
+assert.equal((await writeMigrationReports(site, manifest, report.layout)).qualityPassed, false)
+assert.equal((await validateMigrationReport(site)).passed, false)
+run('npm', ['run', 'build', '--workspaces=false'], site)
+assert(existsSync(join(site, 'dist/client/blog/editor-leak/index.html')), 'Unsafe loader control did not publish editor slug')
+assert(readFileSync(join(site, 'dist/client/blog/index.html'), 'utf8').includes('Secret fixture draft'))
+writeFileSync(loaderPath, safeLoader)
 // Altering the formerly safe draft route must invalidate the exception, even if
 // all source/content snapshots are unchanged. No arbitrary custom reader proof.
 const route = join(site, 'src/pages/blog/[slug].astro')
@@ -76,8 +88,8 @@ writeFileSync(route, safeRoute)
 assert.equal((await writeMigrationReports(site, manifest, report.layout)).qualityPassed, true)
 run('npm', ['run', 'build', '--workspaces=false'], site)
 assert.equal((await validateMigrationReport(site)).passed, true)
-for (const slug of ['secret-draft', 'secret-private']) assert(!existsSync(join(site, 'dist/blog', slug, 'index.html')))
-assert(!readFileSync(join(site, 'dist/blog/index.html'), 'utf8').includes('Secret fixture draft'))
+for (const slug of ['secret-draft', 'secret-private', 'editor-leak']) assert(!existsSync(join(site, 'dist/client/blog', slug, 'index.html')))
+assert(!readFileSync(join(site, 'dist/client/blog/index.html'), 'utf8').includes('Secret fixture draft'))
 console.log('Actual built draft/private publication negatives and changed-reader rejection passed')
 await verifyGeneratedImageEvidence(root, site, report.layout)
 await verifyGeneratedProseEvidence(site, report.layout)
@@ -108,10 +120,10 @@ await assert.rejects(unusualProof())
 writeFileSync(unusualRoute, unusualSafe)
 await unusualProof()
 run('npm', ['run', 'build', '--workspaces=false'], hostileSite)
-assert(!existsSync(join(hostileSite, 'dist/blog/secret-draft/index.html')))
-assert(!readFileSync(join(hostileSite, 'dist/blog/index.html'), 'utf8').includes('Secret fixture draft'))
-for (const dir of [site, hostileSite]) for (const name of ['source-manifest.json', 'migration-report.json', 'migration-report.md']) assert(!existsSync(join(dir, 'dist', name)))
-const hostilePage = readFileSync(join(hostileSite, 'dist/blog/first-post/index.html'), 'utf8')
+assert(!existsSync(join(hostileSite, 'dist/client/blog/secret-draft/index.html')))
+assert(!readFileSync(join(hostileSite, 'dist/client/blog/index.html'), 'utf8').includes('Secret fixture draft'))
+for (const dir of [site, hostileSite]) for (const name of ['source-manifest.json', 'migration-report.json', 'migration-report.md']) assert(!existsSync(join(dir, 'dist/client', name)))
+const hostilePage = readFileSync(join(hostileSite, 'dist/client/blog/first-post/index.html'), 'utf8')
 assert(hostilePage.includes('First body marker alpha.'), 'Hostile-title build lost body')
 assert(hostilePage.includes('O&#39;Reilly') || hostilePage.includes("O'Reilly"), 'Hostile-title build lost text')
 assert(!hostilePage.includes('<script>text-only</script>'), 'Uploaded title became active HTML')

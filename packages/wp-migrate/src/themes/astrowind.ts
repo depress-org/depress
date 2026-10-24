@@ -5,13 +5,14 @@ const writeFile = async (path: string, data: string, _encoding: string) => safeW
 import { existsSync } from 'fs'
 import { join } from 'path'
 import matter from 'gray-matter'
+import { SITE_DEPENDENCIES, SITE_ENGINES } from '../toolchain.js'
 import { sourceString, htmlText, localHref } from './serialization.js'
 import type { ThemeAdapter, ArticleFM, PageFM, PatchConfigOpts, NavItem } from './types.js'
 
 /**
  * AstroWind – https://github.com/onwidget/astrowind
  *
- * Highly customizable Astro 5 + Tailwind CSS site template.
+ * Highly customizable Astro 7 + Tailwind CSS 4 site template.
  * Multiple home layouts (startup, SaaS, personal, mobile-app), landing page templates,
  * blog, about, contact, pricing, services pages — all CSS-var-driven so colours/fonts
  * can be changed in one place.
@@ -28,7 +29,7 @@ export const astrowindAdapter: ThemeAdapter = {
   repo: 'onwidget/astrowind',
   branch: 'main',
   description:
-    'Astro 5 + Tailwind CSS — multiple home/landing templates, blog, dark mode, CSS-var theming',
+    'Astro 7 + Tailwind CSS 4 — multiple home/landing templates, blog, dark mode, CSS-var theming',
   bundled: true,
 
   contentDir: 'src/data/post',
@@ -111,7 +112,7 @@ export const footerData = {
       await writeFile(navPath, navContent, 'utf-8')
     }
 
-    // 3. Patch astro.config.ts — hybrid output + noop image service + Keystatic
+    // 3. Patch astro.config.ts — static output + Node adapter + Keystatic
     const astroCfgPath = join(outputDir, 'astro.config.ts')
     if (existsSync(astroCfgPath)) {
       let cfg = await readFile(astroCfgPath, 'utf-8')
@@ -124,25 +125,13 @@ export const footerData = {
         }
       }
 
-      // Replace existing image: block or inject before integrations:
-      if (!cfg.includes('noop')) {
-        if (/^\s*image\s*:/m.test(cfg)) {
-          cfg = cfg.replace(/\bimage\s*:\s*\{[^}]*(?:\{[^}]*\}[^}]*)?\},?\s*/s, `image: { service: { entrypoint: 'astro/assets/services/noop' } },\n\n  `)
-        } else {
-          cfg = cfg.replace(
-            /(\bintegrations:\s*\[)/,
-            `image: { service: { entrypoint: 'astro/assets/services/noop' } },\n\n  $1`,
-          )
-        }
-      }
-
       // Add Keystatic: switch to hybrid output, add node adapter + react + keystatic
       if (!cfg.includes('keystatic')) {
         cfg = cfg.replace(
           /import \{ defineConfig \} from 'astro\/config';/,
           `import { defineConfig } from 'astro/config';\nimport node from '@astrojs/node';\nimport react from '@astrojs/react';\nimport keystatic from '@keystatic/astro';`,
         )
-        // Keep output: 'static' (Astro 5 default, supports per-page prerender=false)
+        // Keep output: 'static' (Astro 7 default, supports per-page prerender=false)
         // Just inject the node adapter before integrations
         cfg = cfg.replace(
           /export default defineConfig\(\{/,
@@ -161,18 +150,19 @@ export const footerData = {
     const pkgPath = join(outputDir, 'package.json')
     if (existsSync(pkgPath)) {
       const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'))
-      if (!pkg.dependencies?.['@keystatic/core']) {
-        pkg.dependencies = {
-          ...pkg.dependencies,
-          '@keystatic/core': '^0.5.0',
-          '@keystatic/astro': '^5.0.0',
-          '@astrojs/react': '^3.0.0',
-          '@astrojs/node': '^9.0.0',
-          'react': '^18.3.0',
-          'react-dom': '^18.3.0',
-        }
-        await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8')
+      pkg.dependencies = {
+        ...pkg.dependencies,
+        astro: SITE_DEPENDENCIES.astro,
+        vite: SITE_DEPENDENCIES.vite,
+        '@astrojs/node': '11.1.9',
+        '@astrojs/react': SITE_DEPENDENCIES['@astrojs/react'],
+        '@keystatic/astro': SITE_DEPENDENCIES['@keystatic/astro'],
+        '@keystatic/core': SITE_DEPENDENCIES['@keystatic/core'],
+        react: SITE_DEPENDENCIES.react,
+        'react-dom': SITE_DEPENDENCIES['react-dom'],
       }
+      pkg.engines = SITE_ENGINES
+      await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8')
     }
 
     // 5. Write keystatic.config.ts

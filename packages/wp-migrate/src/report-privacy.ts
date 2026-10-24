@@ -34,7 +34,7 @@ export async function proveScaffoldDraftExclusion(
   for (const entry of await readdir(await directory(''), { withFileTypes: true })) {
     if (!entry.isDirectory() && /\.(?:[cm]?[jt]sx?|astro|mdx)$/.test(entry.name)) actual.set(entry.name, await read(entry.name))
   }
-  actual.set('src/content/config.ts', await read('src/content/config.ts'))
+  actual.set('src/content.config.ts', await read('src/content.config.ts'))
   for (const path of ['astro.config.mjs', 'keystatic.config.ts', 'package.json', 'tsconfig.json', 'tailwind.config.mjs']) actual.set(path, await read(path))
   for (const hasCategories of [false, true]) for (const hasTags of [false, true]) {
     const expected = new Map(scaffoldFiles({ siteTitle, siteDescription, siteUrl: siteUrl!, authorName: '', navItems: [], hasCategories, hasTags })
