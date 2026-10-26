@@ -162,3 +162,5 @@ const { verifyGeneratedStaticPluginEvidence } = await import('./generated-static
 await verifyGeneratedStaticPluginEvidence(root)
 const { verifyGeneratedMalformedShortcodeEvidence } = await import('./generated-malformed-shortcode-evidence.mjs')
 await verifyGeneratedMalformedShortcodeEvidence(root)
+const { verifyGeneratedMarkdownEvidence } = await import('./generated-markdown-evidence.mjs')
+await verifyGeneratedMarkdownEvidence(root)

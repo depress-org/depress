@@ -6,6 +6,7 @@ import { XMLParser, XMLValidator } from 'fast-xml-parser'
 import matter from 'gray-matter'
 import TurndownService from 'turndown'
 import Markdoc, { type RenderableTreeNode } from '@markdoc/markdoc'
+import { proveAstrowindMarkdown } from './report-markdown.js'
 import { proveScaffoldDraftExclusion } from './report-privacy.js'
 import { assessStaticPlugins } from './static-plugin-report.js'
 import { attachmentEligible } from './static-plugins.js'
@@ -206,11 +207,18 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
   const eligible = manifest.items.filter(i => i.status === 'publish' && ['post', 'page'].includes(i.type))
   const slugs = count(eligible, i => `${i.type}:${i.slug.toLocaleLowerCase('en-US')}`)
   const paths = count(eligible, i => { try { return expectedPath(i, layout).toLocaleLowerCase('en-US') } catch { return `invalid:${i.key}` } })
-  const output = new Map<string, string>()
+  const output = new Map<string, ImageEvidence[]>()
   let redirects = '', redirectMap: any = null
   const artifacts: Record<string, string> = {}
   try { const bytes = await readSafe(outputDir, 'public/_redirects'); artifacts['public/_redirects'] = sha(bytes); redirects = bytes.toString('utf8') } catch { /* per-item findings below */ }
   try { const bytes = await readSafe(outputDir, 'public/redirects.json'); artifacts['public/redirects.json'] = sha(bytes); redirectMap = JSON.parse(bytes.toString('utf8')) } catch { /* per-item findings below */ }
+  let markdown: Awaited<ReturnType<typeof proveAstrowindMarkdown>> | undefined
+  if (layout.fileExt === 'md' && layout.contentDir === 'src/data/post' && layout.useDirectoryEntries && !layout.pagesDir) {
+    try {
+      markdown = await proveAstrowindMarkdown(p => readSafe(outputDir, p))
+      for (const [path, bytes] of Object.entries(markdown.artifacts)) artifacts[path] = sha(bytes)
+    } catch { /* Unknown/configured renderers remain non-green per item. */ }
+  }
   const items: MigrationItem[] = []
   for (const source of manifest.items) {
     const item: MigrationItem = { key: source.key, id: source.id, type: source.type, sourceStatus: source.status, slug: source.slug, status: 'skipped', findings: [] }
@@ -257,18 +265,22 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
     if (item.findings.some(f => f.code === 'duplicate-source-id' || f.code === 'duplicate-slug')) continue
     let raw: string
     let body = ''
+    let actualImages: ImageEvidence[] = []
     try {
       const bytes = await readSafe(outputDir, path)
       raw = bytes.toString('utf8'); item.outputPath = path; item.contentSha256 = sha(bytes)
     } catch (error) { finding(item.findings, error instanceof UnsafePath ? 'unsafe-path' : 'missing-output', `Cannot safely read expected output ${path}`); continue }
     try {
       const fm = matter(raw, { engines: { javascript: () => { throw new Error('Executable frontmatter is forbidden') } } })
-      body = fm.content; output.set(source.key, body)
+      body = fm.content
+      const html = await markdown?.render(body)
+      actualImages = html === undefined ? images(body, layout.fileExt) : sourceImages(html)
+      output.set(source.key, actualImages)
       if (fm.data.title !== source.title) finding(item.findings, 'title-mismatch', 'Output title differs from source title')
       if (fm.data.author !== source.author) finding(item.findings, 'author-mismatch', `Author for source ID ${source.id} was not preserved exactly`)
       if (source.content.trim() && !fm.content.trim()) finding(item.findings, 'empty-body', 'Nonempty source has empty output body')
       const expectedText = sourceText(sourceContent.get(source.key) ?? source.content)
-      const actualText = bodyText(fm.content, layout.fileExt)
+      const actualText = html === undefined ? bodyText(fm.content, layout.fileExt) : sourceText(html)
       if (expectedText === undefined || actualText === undefined || expectedText !== actualText) finding(item.findings, 'body-text-mismatch', 'Complete normalized visible source prose differs from destination body or its render context is unproven')
       for (const [field, mapped, code] of [['seoTitle', 'title', 'seo-title-mismatch'], ['seoDescription', 'description', 'seo-description-mismatch']] as const) {
         if (source[field] !== undefined && (fm.data[field] ?? fm.data.metadata?.[mapped] ?? fm.data.seo?.[mapped]) !== source[field]) finding(item.findings, code, `Source ${field} was not preserved exactly`)
@@ -284,7 +296,6 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
       if (matches.length !== 1) finding(item.findings, 'missing-featured-attachment', `Featured attachment ${source.featuredImageId} missing or ambiguous`)
       else if (!raw.includes(`/media/${basename(matches[0].url)}`)) finding(item.findings, 'featured-image-mismatch', `Featured attachment ${source.featuredImageId} is not referenced locally`)
     }
-    const actualImages = images(body, layout.fileExt)
     const occurrences = new Map<string, number>()
     const expectedSourceImages = sourceImages(sourceContent.get(source.key) ?? source.content)
     const gallery = compatibility.occurrences.filter(o => o.sourceId === source.id && replaced.has(o.tokenId))
@@ -341,7 +352,7 @@ export async function inspectMigration(outputDir: string, manifest: SourceManife
     catch (error) { finding(entry.findings, error instanceof UnsafePath ? 'unsafe-path' : 'missing-media', `Attachment ${source.id} local file is unavailable`) }
     if (source.altText) {
       const local = `/media/${name}`
-      const preserved = [...output.values()].some(body => images(body, layout.fileExt).some(image => image.src === local && image.alt === source.altText))
+      const preserved = [...output.values()].some(images => images.some(image => image.src === local && image.alt === source.altText))
       if (!preserved) finding(entry.findings, 'unsupported-alt', `Source alt for attachment ${source.id} is not proven preserved on a local image`)
     }
     entry.status = entry.findings.length ? (entry.findings.every(f => f.code === 'unsupported-alt') ? 'unsupported' : 'failed') : 'migrated'

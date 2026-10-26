@@ -42,6 +42,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@astrojs/markdown-remark": "7.3.4",
     "@depress-org/core": "^0.1.0",
     "@markdoc/markdoc": "0.4.0",
     "chalk": "^5.0.0",
