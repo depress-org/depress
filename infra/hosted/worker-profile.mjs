@@ -11,7 +11,9 @@ export const WORKER_LIMITS = Object.freeze({
   tempBytes: 16777216,
   cpuSeconds: 120,
   wallTimeMs: 180000,
-  fileBytes: 134217728,
+  // Pinned workerd is 140383608 bytes: 128MiB fails real offline npm ci (EFBIG).
+  // 160MiB remains finite; aggregate work1GiB/memory2GiB/time limits unchanged.
+  fileBytes: 167772160,
   openFiles: 128,
   logBytes: 1048576,
 })

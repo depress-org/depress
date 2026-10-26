@@ -1,5 +1,5 @@
 // Adversarial fixture image ONLY. Never accepted as a request-selected command.
-import { readFileSync, writeFileSync, existsSync, statfsSync, openSync, closeSync, symlinkSync, renameSync, unlinkSync } from 'node:fs'
+import { readFileSync, writeFileSync, writeSync, existsSync, statfsSync, openSync, closeSync, symlinkSync, renameSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
 const chunks=[];for await(const c of process.stdin)chunks.push(c)
@@ -33,8 +33,14 @@ if(op==='boundary'){
   process.stdout.write(JSON.stringify({denied,hostDenied}))
 }else if(op==='file'){
   const fd=openSync('/work/large-file','wx');let rejected=false
-  try{for(let i=0;i<17;i++)writeFileSync(fd,Buffer.alloc(8*1024*1024))}catch(e){rejected=e.code==='EFBIG'}finally{closeSync(fd)}
+  try{for(let i=0;i<21;i++)writeFileSync(fd,Buffer.alloc(8*1024*1024))}catch(e){rejected=e.code==='EFBIG'}finally{closeSync(fd)}
   process.stdout.write(JSON.stringify({rejected}))
+}else if(op==='required-file'){
+  // Exact largest binary in the pinned, measured public offline scaffold graph.
+  // This positive control must fail under the original 128MiB file limit.
+  const bytes=140383608,fd=openSync('/work/required-file','wx')
+  try{for(let written=0;written<bytes;written+=8*1024*1024)writeFileSync(fd,Buffer.alloc(Math.min(bytes-written,8*1024*1024)))}finally{closeSync(fd)}
+  process.stdout.write(JSON.stringify({bytes}))
 }else if(op==='pids'){
   const children=[];let rejected=false
   for(let i=0;i<100;i++){
@@ -54,7 +60,10 @@ if(op==='boundary'){
 }else if(op==='memory'){
   const chunks=[];while(true)chunks.push(Buffer.alloc(32*1024*1024,1))
 }else if(op==='flood'){
-  while(true)process.stdout.write('FAKE_TOKEN_SENTINEL_25 /private/source raw stdout\n'.repeat(4096))
+  // Synchronous pipe writes exercise capture, not unbounded JS write buffering
+  // which starves libuv and can OOM before the daemon receives the first block.
+  const block=Buffer.from('FAKE_TOKEN_SENTINEL_25 /private/source raw stdout\n'.repeat(4096))
+  while(true)writeSync(1,block)
 }else if(op==='cpu'){
   while(true){}
 }else if(op==='wait'){

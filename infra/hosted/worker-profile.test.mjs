@@ -53,7 +53,7 @@ test('profile requests finite CPU/RAM/swap/PID/file/FD limits without disabling 
   assert.equal(value(args, '--pids-limit'), '64')
   assert.equal(value(args, '--memory'), '2147483648')
   assert.equal(value(args, '--memory-swap'), value(args, '--memory'))
-  assert.deepEqual(values(args, '--ulimit'), ['cpu=120:120', 'nofile=128:128', 'fsize=134217728:134217728', 'core=0:0'])
+  assert.deepEqual(values(args, '--ulimit'), ['cpu=120:120', 'nofile=128:128', 'fsize=167772160:167772160', 'core=0:0'])
   assert.ok(!args.includes('--oom-kill-disable'))
   assert.ok(!args.includes('--oom-score-adj'))
   for (const v of Object.values(WORKER_LIMITS)) assert.ok(Number.isSafeInteger(v) && v > 0)

@@ -5,11 +5,12 @@ export async function executeOne(queue, runtime) {
   const job = await queue.claim(); if (!job) return false
   let attached, output, containerId, launched = false
   try {
-    await queue.withJob(job.id, async () => {
+    await queue.withJob(job.id, async authorize => {
       const current = await queue.current(job.id,job.lease_id)
       if (!current || current.state !== 'running' || Number(current.deadline_ms) <= Date.now()) return
       const id = await runtime.create(job)
       containerId = id
+      await authorize(job)
       // Exact-ID start cannot resurrect a removed container; reaper shares this lock.
       attached = runtime.call(['start','--attach','--interactive',id], {
         input: current.input.toString(), timeoutMs: WORKER_LIMITS.wallTimeMs,
@@ -17,6 +18,7 @@ export async function executeOne(queue, runtime) {
       })
       // Consume early rejection immediately; no unhandled raw controller errors.
       attached.catch(() => {})
+      await authorize(job)
       launched = true
     })
     if (launched) {
@@ -39,11 +41,14 @@ export async function executeOne(queue, runtime) {
 /** Separate process/failure domain from broker. Also kills on DB outage, using
  * Docker Created + fixed hard lifetime (not workload-supplied labels/time).
  * Serialize creates/removals in DB. With DB unavailable: remove expired/all owned
- * containers; no new broker may create because its lease check requires the DB.
+ * containers. Slow creates revalidate on the original lock session before and
+ * after start; a simultaneous partition/start is reconciled by repeated reaping,
+ * not by a claim of atomicity between PostgreSQL and the runtime daemon.
  */
 export async function reap(queue, runtime) {
   let dbAvailable = true, pending = []
   try { pending = await queue.pendingReap() } catch { dbAvailable = false }
+  try {
   const discovered = await runtime.ownedContainers()
   const candidates = new Map(pending.map(j => [j.id + j.lease_id,j]))
   for (const { job, container } of discovered) {
@@ -62,5 +67,9 @@ export async function reap(queue, runtime) {
       else await cleanup()
     } catch { await queue.retry(job).catch(() => {}) }
   }
-  if (dbAvailable) await queue.sweep()
+  } finally {
+    // Queued/terminal DB expiry does not depend on daemon availability; sweep
+    // never releases running/stopping capacity without confirmed removal.
+    if (dbAvailable) await queue.sweep()
+  }
 }

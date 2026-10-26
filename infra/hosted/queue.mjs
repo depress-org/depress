@@ -26,14 +26,25 @@ export class Queue {
   }
   async withJob(id, fn) {
     const c = await this.pool.connect()
+    let lost = false
+    const onError = () => { lost = true }
+    c.on('error',onError)
     try {
       // Serialize runtime create/start vs exact-lease removal across controllers.
       await c.query("SET lock_timeout = '5s'")
       await c.query('SELECT pg_advisory_lock(hashtext($1),25)', [id])
-      return await fn()
+      // Revalidate on the lock session itself, never on a fresh connection after
+      // lock loss. Cancellation and deadline can change during a slow create.
+      return await fn(async job => {
+        if (lost || job.id !== id) throw new Error('Lost runtime fence')
+        const {rows:[r]} = await c.query('SELECT * FROM private_jobs25 WHERE id=$1 AND lease_id=$2',[id,job.lease_id])
+        if (lost || !r || r.state !== 'running' || Number(r.deadline_ms) <= Date.now()) throw new Error('Lost runtime fence')
+        return r
+      })
     } finally {
       await c.query('SELECT pg_advisory_unlock(hashtext($1),25)', [id]).catch(() => {})
-      c.release()
+      c.removeListener('error',onError)
+      c.release(lost)
     }
   }
   forOwner(identity) {

@@ -10,7 +10,7 @@ function config() {
   const tmpfs=Object.fromEntries(args.flatMap((v,i)=>v==='--tmpfs'?[args[i+1].split(':')]:[]))
   return {Id:id,Name:`/depress25-${job.id}-${job.lease_id}`,Image:image,AppArmorProfile:'docker-default',Mounts:[],
     Config:{User:'65532:65532',WorkingDir:'/work',Env:Object.entries(WORKER_ENVIRONMENT).map(([k,v])=>`${k}=${v}`),Labels:{'org.depress.boundary':'issue25','org.depress.job':job.id,'org.depress.lease':job.lease_id}},
-    HostConfig:{ReadonlyRootfs:true,NetworkMode:'none',IpcMode:'private',CgroupnsMode:'private',Init:true,CapDrop:['ALL'],SecurityOpt:['no-new-privileges=true'],PidsLimit:64,Memory:2147483648,MemorySwap:2147483648,NanoCpus:1e9,ShmSize:16777216,Ulimits:[{Name:'cpu',Soft:120,Hard:120},{Name:'nofile',Soft:128,Hard:128},{Name:'fsize',Soft:134217728,Hard:134217728},{Name:'core',Soft:0,Hard:0}],LogConfig:{Type:'none'},RestartPolicy:{Name:'no'},Tmpfs:tmpfs}}
+    HostConfig:{ReadonlyRootfs:true,NetworkMode:'none',IpcMode:'private',CgroupnsMode:'private',Init:true,CapDrop:['ALL'],SecurityOpt:['no-new-privileges=true'],PidsLimit:64,Memory:2147483648,MemorySwap:2147483648,NanoCpus:1e9,ShmSize:16777216,Ulimits:[{Name:'cpu',Soft:120,Hard:120},{Name:'nofile',Soft:128,Hard:128},{Name:'fsize',Soft:167772160,Hard:167772160},{Name:'core',Soft:0,Hard:0}],LogConfig:{Type:'none'},RestartPolicy:{Name:'no'},Tmpfs:tmpfs}}
 }
 test('effective container policy fails closed on weakened runtime and foreign identity',()=>{
   const runtime=new Runtime(image);assert(runtime.verify(config(),job))
@@ -57,7 +57,7 @@ test('created AppArmor policy is explicit and running/exited workloads require e
 })
 test('broker terminal transition occurs only AFTER confirmed exact-worker removal',async()=>{
   const events=[],artifact={kind:'preview-only',files:[{path:'index.html',data:'eA=='}]}
-  const queue={claim:async()=>job,withJob:async(_id,fn)=>fn(),current:async()=>job,finish:async(_j,a)=>events.push(a?'done':'failed'),retry:async()=>events.push('retry')}
+  const queue={claim:async()=>job,withJob:async(_id,fn)=>fn(async()=>job),current:async()=>job,finish:async(_j,a)=>events.push(a?'done':'failed'),retry:async()=>events.push('retry')}
   const runtime={create:async()=>id,call:async()=>({code:0,stderr:'',stdout:JSON.stringify({ok:true,artifact})}),inspect:async()=>config(),verify:()=>true,remove:async()=>events.push('removed')}
   assert.equal(await executeOne(queue,runtime),true);assert.deepEqual(events,['removed','done'])
   events.length=0;runtime.remove=async()=>{throw new Error('uncertain')};await executeOne(queue,runtime);assert.deepEqual(events,['retry'])
@@ -69,6 +69,19 @@ test('cancelled-before-create never starts; idle claim never calls runtime',asyn
   const q={claim:async()=>job,withJob:async(_,fn)=>fn(),current:async()=>({...job,state:'stopping'}),finish:async()=>finished++}
   await executeOne(q,{create:async()=>created++,remove:async()=>true});assert.equal(created,0);assert.equal(finished,1)
   q.claim=async()=>undefined;assert.equal(await executeOne(q,{}),false)
+})
+for(const reason of ['cancellation','deadline','lost-lock'])test(`late create cannot start after ${reason}`,async()=>{
+ let allowed=true,started=0,removed=0
+ const q={claim:async()=>job,current:async()=>job,
+  withJob:async(_,fn)=>fn(async()=>{if(!allowed)throw new Error('Fenced start')}),
+  finish:async()=>{},retry:async()=>{}}
+ const r={create:async()=>{allowed=false;return id},call:async()=>{started++;return {code:1}},remove:async()=>removed++}
+ await executeOne(q,r);assert.equal(started,0);assert.equal(removed,1)
+})
+test('DB-only expiry still runs during runtime discovery outage without freeing uncertain workers',async()=>{
+ const events=[],q={pendingReap:async()=>[],sweep:async()=>events.push('sweep'),finish:async()=>events.push('finish')}
+ await assert.rejects(reap(q,{ownedContainers:async()=>{throw new Error('fake daemon unavailable')}}))
+ assert.deepEqual(events,['sweep'])
 })
 test('separate reaper handles cancellation, orphan and outage; failure retains slot',async()=>{
   const events=[]

@@ -56,6 +56,7 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
  await t.test('actual process/FD/aggregate disk limits reject excess while ordinary files work',async()=>{
   for(const op of ['pids','fds','disk'])await runProbe(op,r=>{assert.equal(r.code,0,r.stderr);assert.equal(JSON.parse(r.stdout).rejected,true,op)},30000)
   await runProbe('file',r=>assert(r.code!==0||JSON.parse(r.stdout).rejected),30000)
+  await runProbe('required-file',r=>{assert.equal(r.code,0);assert.equal(JSON.parse(r.stdout).bytes,140383608)},30000)
  })
  await t.test('real negative control: weakening a copied network profile exposes only the fake loopback fixture',async()=>{
   const listener=createServer(socket=>socket.end());await new Promise(r=>listener.listen(18726,'127.0.0.1',r))
@@ -112,6 +113,60 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
   assert.equal(reservations.filter(x=>x.status==='fulfilled').length,4)
   await pool.query('UPDATE private_uploads25 SET expires_ms=0');await q.sweep()
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM private_uploads25')).rows[0].n,0)
+ })
+ await t.test('real lock session loss fences a start even after the pool reconnects',async()=>{
+  await reset();await q.forOwner('session-owner').submit(input);const job=await q.claim()
+  await q.withJob(job.id,async authorize=>{
+   assert.equal((await authorize(job)).state,'running')
+   await pool.query("SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND objid=25 AND granted")
+   await pause(100);await pool.query('SELECT 1')
+   await assert.rejects(authorize(job),/Lost runtime fence|not queryable|terminated|closed/i)
+  })
+  await q.finish(job)
+ })
+ for(const reason of ['cancel','deadline'])await t.test(`actual slow-create ${reason} is fenced before worker start`,async()=>{
+  await reset();await q.forOwner('late-owner').submit(input);let created,started=0
+  const delayed=Object.create(probe)
+  delayed.create=async job=>{
+   const id=await probe.create(job);created={id,job}
+   if(reason==='cancel')await q.forOwner('late-owner').cancel(job.id)
+   else await pool.query('UPDATE private_jobs25 SET deadline_ms=0 WHERE id=$1',[job.id])
+   return id
+  }
+  delayed.call=async(args,options)=>{if(args[0]==='start'&&args.includes('--attach'))started++;return probe.call(args,options)}
+  await executeOne(q,delayed)
+  assert.equal(started,0)
+  assert.equal((await q.current(created.job.id,created.job.lease_id)).state,'failed')
+  assert.equal(await probe.inspect(created.id),undefined)
+ })
+ await t.test('actual late create after DB-outage discovery never starts; recovery removes reserved input',async()=>{
+  await reset();await q.forOwner('late-outage-owner').submit(input);let created,started=0
+  const delayed=Object.create(probe)
+  delayed.create=async job=>{
+   await probe.checked(['stop','postgres25'],{timeoutMs:30000})
+   await reap(q,probe) // discovery completes before the delayed create is visible
+   const id=await probe.create(job);created={id,job};return id
+  }
+  delayed.call=async(args,options)=>{if(args[0]==='start'&&args.includes('--attach'))started++;return probe.call(args,options)}
+  try{
+   await executeOne(q,delayed)
+   assert.equal(started,0)
+   assert.equal((await probe.inspect(created.id)).State.Status,'created')
+  }finally{await probe.checked(['start','postgres25'])}
+  await until(async()=>{try{await pool.query('SELECT 1');return true}catch{return false}},30000)
+  await pool.query('UPDATE private_jobs25 SET deadline_ms=0 WHERE id=$1',[created.job.id]);await reap(q,probe)
+  assert.equal(await probe.inspect(created.id),undefined)
+  assert.equal((await q.current(created.job.id,created.job.lease_id)).input,null)
+ })
+ await t.test('real queued bytes expire during daemon discovery outage; unconfirmed running slot stays reserved',async()=>{
+  await reset();const owned=q.forOwner('expiry-outage-owner');await owned.submit(input)
+  const job=await q.claim(),queued=await owned.submit(input)
+  await pool.query('UPDATE private_jobs25 SET expires_ms=0 WHERE id=$1',[queued.id])
+  await assert.rejects(reap(q,{ownedContainers:async()=>{throw new Error('FAKE_DAEMON_OUTAGE')}}))
+  const row=(await pool.query('SELECT * FROM private_jobs25 WHERE id=$1',[queued.id])).rows[0]
+  assert.equal(row.state,'failed');assert.equal(row.input,null)
+  assert.equal((await q.current(job.id,job.lease_id)).state,'running');assert.equal(await q.claim(),undefined)
+  await q.finish(job)
  })
  await t.test('bounded bytes, queued abandon cleanup and durable fake-DB restart',async()=>{
   await reset()
