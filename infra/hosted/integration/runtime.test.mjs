@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {readFile,writeFile,rm} from 'node:fs/promises'
 import {resolve} from 'node:path'
 import {createServer} from 'node:net'
+import {request as nodeRequest} from 'node:http'
 import {fork,spawn} from 'node:child_process'
 import {once} from 'node:events'
 import {connect,Queue,migrate,QueueFull} from '../queue.mjs'
@@ -160,7 +161,16 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
   const tokenA='FAKE_API_OWNER_A_'+'a'.repeat(32),tokenB='FAKE_API_OWNER_B_'+'b'.repeat(32),previewA='FAKE_PREVIEW_A_'+'c'.repeat(32),previewB='FAKE_PREVIEW_B_'+'d'.repeat(32)
   const server=listenHosted({queue:q,identities:[{token:tokenA,ownerId:'owner-A'},{token:tokenB,ownerId:'owner-B'}],previewIdentities:[{token:previewA,ownerId:'owner-A'},{token:previewB,ownerId:'owner-B'}],apiOrigin:'http://api.test:18725',previewOrigin:'http://preview.test:18725'})
   await new Promise(r=>server.listen(18725,'127.0.0.1',r))
-  const request=(path,token,init={},preview=false)=>fetch('http://127.0.0.1:18725'+path,{...init,headers:{host:preview?'preview.test:18725':'api.test:18725',...(token?{authorization:'Bearer '+token}:{}),...init.headers}})
+  const request=async(path,token,init={},preview=false)=>{
+   const host=preview?'preview.test:18725':'api.test:18725'
+   const outgoing=new Request(`http://${host}${path}`,{...init,headers:{...(token?{authorization:'Bearer '+token}:{}),...init.headers}})
+   const body=outgoing.body?Buffer.from(await outgoing.arrayBuffer()):undefined
+   return new Promise((yes,no)=>{
+    const req=nodeRequest({hostname:'127.0.0.1',port:18725,path,method:outgoing.method,headers:{...Object.fromEntries(outgoing.headers),host}},res=>{
+     const chunks=[];res.on('data',chunk=>chunks.push(chunk));res.on('end',()=>yes(new Response(Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));res.on('error',no)
+    });req.on('error',no);req.end(body)
+   })
+  }
   try{
    assert.equal((await request('/api/jobs')).status,401)
    const form=new FormData();form.set('theme','scaffold');form.set('wxr',new Blob([xml]),'private-source.xml')

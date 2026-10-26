@@ -30,7 +30,7 @@ test('minimal public record excludes owner/input/logs/paths/raw errors',()=>{
 })
 test('preview requires separate site and separate configured authority',()=>{
   assert.deepEqual(origins('https://api.example.com','https://preview.example.net'),{api:'https://api.example.com',preview:'https://preview.example.net'})
-  for(const p of ['https://preview.example.com','https://api.example.com','https://a:b@example.net','file:///preview','https://preview.example.net/path']) assert.throws(()=>origins('https://api.example.com',p))
+  for(const p of ['https://preview.example.com','https://preview.example.com.','https://api.example.com','https://a:b@example.net','file:///preview','https://preview.example.net/path','http://preview.example.net']) assert.throws(()=>origins('https://api.example.com',p))
 })
 test('deployment authority is immutable owner/job/digest/target/expiry bound; only fake closure has fake credentials',async()=>{
   const bytes=Buffer.from('verified fake static artifact'),digest=hash(bytes),jobId='00000000-0000-4000-8000-000000000025'

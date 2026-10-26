@@ -12,6 +12,7 @@ RUN npm ci --ignore-scripts --legacy-peer-deps --no-audit --no-fund \
 # Only public dependencies/repository source are copied, never CI .git/.env/home.
 FROM scratch AS worker
 COPY --from=prepared / /
+ENV PATH=/usr/local/bin:/usr/bin:/bin
 WORKDIR /work
 ENTRYPOINT ["/usr/local/bin/node", "/opt/depress/infra/hosted/workload.mjs"]
 

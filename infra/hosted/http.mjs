@@ -14,7 +14,7 @@ export function origins(api,preview) {
   const site = u => u.hostname.split('.').slice(-2).join('.')
   // Conservative separate-site rule: rejects same registrable suffix even on
   // multi-label public suffixes. No sibling bullwinkle.space origin permitted.
-  for (const u of [a,p]) if (u.origin !== u.href.replace(/\/$/,'') || u.username || u.password || !['https:','http:'].includes(u.protocol) || u.hostname.split('.').length < 2) throw new Error('Invalid origin')
+  for (const u of [a,p]) if (u.origin !== u.href.replace(/\/$/,'') || u.username || u.password || !['https:','http:'].includes(u.protocol) || u.hostname.endsWith('.') || u.hostname.split('.').length < 2 || u.protocol === 'http:' && !u.hostname.endsWith('.test')) throw new Error('Invalid origin')
   if (site(a) === site(p)) throw new Error('Preview must be a separate site')
   return {api:a.origin,preview:p.origin}
 }
