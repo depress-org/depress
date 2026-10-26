@@ -100,3 +100,13 @@ test('separate reaper handles cancellation, orphan and outage; failure retains s
   events.length=0;r.remove=async()=>{throw new Error('daemon uncertain')};await reap(q,r);assert.deepEqual(events,['retry','sweep'])
   events.length=0;q.pendingReap=async()=>{throw new Error('DB down')};r.remove=async()=>events.push('remove');await reap(q,r);assert.deepEqual(events,['remove'])
 })
+test('reaper removal is observable before its durable terminal transaction completes',async()=>{
+ let removed=false,state='running',releaseFinish,observeRemoval
+ const finishing=new Promise(resolve=>{releaseFinish=resolve}),removal=new Promise(resolve=>{observeRemoval=resolve})
+ const q={pendingReap:async()=>[job],withJob:async(_,fn)=>fn(),finish:async()=>{await finishing;state='failed'},sweep:async()=>{}}
+ const r={ownedContainers:async()=>[],remove:async()=>{removed=true;observeRemoval()}}
+ const reaping=reap(q,r)
+ await removal
+ assert.equal(removed,true);assert.equal(state,'running','container absence alone cannot assert terminal state')
+ releaseFinish();await reaping;assert.equal(state,'failed')
+})

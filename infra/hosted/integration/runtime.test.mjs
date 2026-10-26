@@ -234,7 +234,10 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
   await reset();await q.forOwner('wall-owner').submit(input);const job=await q.claim(),id=await probe.create(job),began=Date.now()
   const attached=probe.call(['start','--attach','--interactive',id],{input:'{"op":"wait"}',timeoutMs:200000});attached.catch(()=>{})
   const reaper=spawn(process.execPath,['infra/hosted/control.mjs','reaper'],{env:{...fakeEnv,DEPRESS25_TEST_IMAGE:probe.imageId},stdio:'ignore'})
-  try{await until(async()=>!(await probe.inspect(id)),190000);assert(Date.now()-began>=175000);assert(Date.now()-began<190000);await attached.catch(()=>{});assert.equal((await q.current(job.id,job.lease_id)).state,'failed')}
+  // Removal and the durable terminal update are ordered, not atomic. Observe
+  // both within the ORIGINAL hard deadline; disappearance alone can precede the
+  // reaper's finish transaction by one scheduler/DB roundtrip.
+  try{await until(async()=>!(await probe.inspect(id))&&(await q.current(job.id,job.lease_id)).state==='failed',190000);assert(Date.now()-began>=175000);assert(Date.now()-began<190000);await attached.catch(()=>{});assert.equal((await q.current(job.id,job.lease_id)).state,'failed')}
   finally{reaper.kill('SIGTERM');await probe.remove(job)}
  })
  await t.test('actual owner-scoped HTTP -> durable queue -> runJob and offline build -> private expiring preview',async()=>{
