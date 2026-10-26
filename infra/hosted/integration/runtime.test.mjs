@@ -237,7 +237,15 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
   // Removal and the durable terminal update are ordered, not atomic. Observe
   // both within the ORIGINAL hard deadline; disappearance alone can precede the
   // reaper's finish transaction by one scheduler/DB roundtrip.
-  try{await until(async()=>!(await probe.inspect(id))&&(await q.current(job.id,job.lease_id)).state==='failed',190000);assert(Date.now()-began>=175000);assert(Date.now()-began<190000);await attached.catch(()=>{});assert.equal((await q.current(job.id,job.lease_id)).state,'failed')}
+  try{
+   await until(async()=>!(await probe.inspect(id)),190000)
+   // Preserve the original lower/upper bounds on REMOVAL itself, independently
+   // of any later DB scheduling delay; terminal reconciliation shares that cap.
+   assert(Date.now()-began>=175000);assert(Date.now()-began<190000)
+   await until(async()=>(await q.current(job.id,job.lease_id)).state==='failed',Math.max(1,began+190000-Date.now()))
+   await attached.catch(()=>{});assert(Date.now()-began<190000)
+   assert.equal((await q.current(job.id,job.lease_id)).state,'failed')
+  }
   finally{reaper.kill('SIGTERM');await probe.remove(job)}
  })
  await t.test('actual owner-scoped HTTP -> durable queue -> runJob and offline build -> private expiring preview',async()=>{
