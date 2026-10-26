@@ -14,6 +14,7 @@ import {identifier,hash,POLICY} from '../protocol.mjs'
 import {workerName,createWorkerArgs} from '../worker-profile.mjs'
 import {listenHosted} from '../server.mjs'
 import {chromium} from 'playwright-core'
+import {previewXml,generatedPreviewProof} from './generated-preview.mjs'
 
 // Hard guard: never run this against a local/shared daemon or a live database.
 assert.equal(process.env.GITHUB_ACTIONS,'true')
@@ -253,7 +254,7 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
   }
   try{
    assert.equal((await request('/api/jobs')).status,401)
-   const form=new FormData();form.set('theme','scaffold');form.set('wxr',new Blob([xml]),'private-source.xml')
+   const form=new FormData();form.set('theme','scaffold');form.set('wxr',new Blob([previewXml(xml)]),'private-source.xml')
    const sql=await readFile(new URL('../../../fixtures/media-archive/database.sql',import.meta.url))
    const media=await readFile(new URL('../../../fixtures/media-archive/uploads.zip',import.meta.url))
    form.set('sql',new Blob([Buffer.concat([sql,Buffer.from('\n-- FAKE_PRIVATE_SQL_25\n')])]),'private-dump.sql')
@@ -266,7 +267,7 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
    if(done.status!=='done'){
     const diagnostic=new Runtime(process.env.DEPRESS25_DIAGNOSTIC_IMAGE),identity={id:identifier(),lease_id:identifier()}
     try{
-     const id=await diagnostic.create(identity),r=await diagnostic.call(['start','--attach','--interactive',id],{input:JSON.stringify({...input,sql:Buffer.concat([sql,Buffer.from('\n-- FAKE_PRIVATE_SQL_25\n')]).toString('base64'),media:media.toString('base64')}),timeoutMs:180000})
+     const id=await diagnostic.create(identity),r=await diagnostic.call(['start','--attach','--interactive',id],{input:JSON.stringify({...input,wxr:Buffer.from(previewXml(xml)).toString('base64'),sql:Buffer.concat([sql,Buffer.from('\n-- FAKE_PRIVATE_SQL_25\n')]).toString('base64'),media:media.toString('base64')}),timeoutMs:180000})
      console.log(JSON.stringify({fakeWorkloadDiagnosis:JSON.parse(r.stdout)}))
     }finally{await diagnostic.remove(identity)}
    }
@@ -286,11 +287,20 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
    // Explicit hostile active-content artifact fixture; not fabricated pipeline output.
    const active={kind:'preview-only',files:[{path:'active.html',data:Buffer.from('<!doctype html><h1>Isolated private preview</h1><script>window.PWNED=true;fetch("http://api.test:18725/api/jobs")</script><form action="http://api.test:18725/api/jobs"><button>Blocked form</button></form>').toString('base64')}]}
    const bytes=Buffer.from(JSON.stringify(active)),digest=hash(bytes)
-   await pool.query('UPDATE private_jobs25 SET artifact=$2,artifact_digest=$3 WHERE id=$1',[job.id,bytes,digest])
    const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--no-proxy-server','--host-resolver-rules=MAP preview.test 127.0.0.1, MAP api.test 127.0.0.1']})
    try{
     const context=await browser.newContext({httpCredentials:{username:'preview',password:previewA,origin:'http://preview.test:18725'}}),page=await context.newPage(),requests=[]
     page.on('request',r=>requests.push(r.url()))
+    // Exercise actual runJob/build bytes BEFORE the independent hostile fixture.
+    const base=`/preview/${job.id}/${done.artifact.digest}`
+    console.log(JSON.stringify({generatedStaticPreview:await generatedPreviewProof(page,'http://preview.test:18725'+base)}))
+    await page.screenshot({path:'.tmp/preview25-generated.png',fullPage:true})
+    const resources=artifact.files.filter(f=>f.path.endsWith('.css')||f.path.endsWith('.png'))
+    assert(resources.some(f=>f.path.endsWith('.css')));assert(resources.some(f=>f.path.endsWith('.png')))
+    for(const resource of resources)assert.equal((await request(base+'/'+resource.path,previewB,{},true)).status,404)
+    await pool.query('UPDATE private_jobs25 SET artifact_expires_ms=0 WHERE id=$1',[job.id]);await q.sweep()
+    for(const resource of resources)assert.equal((await request(base+'/'+resource.path,previewA,{},true)).status,404)
+    await pool.query('UPDATE private_jobs25 SET artifact=$2,artifact_digest=$3,artifact_expires_ms=$4 WHERE id=$1',[job.id,bytes,digest,Date.now()+POLICY.artifactMs])
     await page.goto(`http://preview.test:18725/preview/${job.id}/${digest}/active.html`)
     assert.equal(await page.locator('h1').textContent(),'Isolated private preview')
     assert.equal(await page.evaluate(()=>window.PWNED),undefined)

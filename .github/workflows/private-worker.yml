@@ -62,6 +62,7 @@ jobs:
           path: |
             .tmp/private-worker-runtime.log
             .tmp/preview25.png
+            .tmp/preview25-generated.png
       - name: Remove only disposable test resources
         if: always()
         run: |

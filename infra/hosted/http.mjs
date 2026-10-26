@@ -1,7 +1,8 @@
 import { authenticator, Admission, resolveLimits } from '../../packages/web/dist/security.js'
 import { readUpload, UploadError } from '../../packages/web/dist/upload.js'
 import { QueueFull } from './queue.mjs'
-import { POLICY, mime, decode } from './protocol.mjs'
+import { POLICY } from './protocol.mjs'
+import { previewFile } from './preview.mjs'
 
 const headers = { 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff',
   'Referrer-Policy':'no-referrer', 'Cross-Origin-Resource-Policy':'same-origin',
@@ -44,13 +45,13 @@ export function createHostedHandler({queue,identities,previewIdentities,apiOrigi
       scope = queue.forOwner(ownerId)
       if (preview) {
         if (request.method !== 'GET' || request.headers.has('service-worker') || request.headers.get('sec-fetch-dest') === 'serviceworker') return json({error:'Not found'},404)
-        const match = /^\/preview\/([a-f0-9-]{36})\/([a-f0-9]{64})\/(.+)$/.exec(url.pathname)
-        if (!match || match[3].includes('%')) return json({error:'Not found'},404)
+        const match = /^\/preview\/([a-f0-9-]{36})\/([a-f0-9]{64})(?:\/(.*))?$/.exec(url.pathname)
+        if (!match || match[3]?.includes('%')) return json({error:'Not found'},404)
         const bytes = await scope.artifact(match[1],match[2])
         if (!bytes) return json({error:'Not found'},404)
-        const artifact = JSON.parse(bytes), file = artifact.files.find(f => f.path === match[3])
+        const file = previewFile(JSON.parse(bytes),match[3] ?? '',`/preview/${match[1]}/${match[2]}`)
         if (!file) return json({error:'Not found'},404)
-        return new Response(decode(file.data,POLICY.artifactBytes),{headers:{...headers,'Content-Type':mime(file.path)}})
+        return new Response(file.body,{headers:{...headers,'Content-Type':file.type}})
       }
       if (request.method === 'GET' && url.pathname === '/api/jobs') return json({jobs:await scope.list()})
       const jobId = /^\/api\/jobs\/([a-f0-9-]{36})$/.exec(url.pathname)?.[1]
