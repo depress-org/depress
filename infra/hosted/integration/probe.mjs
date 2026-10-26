@@ -1,9 +1,9 @@
 // Adversarial fixture image ONLY. Never accepted as a request-selected command.
-import { readFileSync, writeFileSync, existsSync, statfsSync, openSync, closeSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, statfsSync, openSync, closeSync, symlinkSync, renameSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
 const chunks=[];for await(const c of process.stdin)chunks.push(c)
-const {op}=JSON.parse(Buffer.concat(chunks))
+const {op,marker}=JSON.parse(Buffer.concat(chunks))
 if(op==='boundary'){
   const status=readFileSync('/proc/self/status','utf8')
   const denied=path=>{try{writeFileSync(path,'fake');return false}catch{return true}}
@@ -17,6 +17,23 @@ if(op==='boundary'){
     cgroupReadonly:denied('/sys/fs/cgroup/pids.max'),work:Number(statfsSync('/work').blocks*statfsSync('/work').bsize),tmp:Number(statfsSync('/tmp').blocks*statfsSync('/tmp').bsize),
     privatePid:readFileSync('/proc/1/comm','utf8').trim().includes('docker-init')}
   process.stdout.write(JSON.stringify(output))
+}else if(op==='network-fixture'){
+  const denied=await new Promise(r=>{const s=connect({host:'127.0.0.1',port:18726});s.setTimeout(500);s.on('connect',()=>{s.destroy();r(false)});s.on('error',()=>r(true));s.on('timeout',()=>{s.destroy();r(true)})})
+  process.stdout.write(JSON.stringify({denied}))
+}else if(op==='ancestor'){
+  // Explicit fake host marker only. No host home/secret discovery.
+  let denied=true
+  for(let i=0;i<50;i++){
+    symlinkSync('/etc','/work/link');renameSync('/work/link','/work/current')
+    try{writeFileSync('/work/current/ancestor-swap','fake');denied=false}catch{}
+    unlinkSync('/work/current')
+  }
+  let hostDenied=false;try{writeFileSync(marker,'hostile')}catch{hostDenied=true}
+  process.stdout.write(JSON.stringify({denied,hostDenied}))
+}else if(op==='file'){
+  const fd=openSync('/work/large-file','wx');let rejected=false
+  try{for(let i=0;i<17;i++)writeFileSync(fd,Buffer.alloc(8*1024*1024))}catch(e){rejected=e.code==='EFBIG'}finally{closeSync(fd)}
+  process.stdout.write(JSON.stringify({rejected}))
 }else if(op==='pids'){
   const children=[];let rejected=false
   for(let i=0;i<100;i++){

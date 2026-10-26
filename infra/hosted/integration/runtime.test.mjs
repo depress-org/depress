@@ -1,13 +1,15 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {readFile} from 'node:fs/promises'
+import {readFile,writeFile,rm} from 'node:fs/promises'
+import {resolve} from 'node:path'
+import {createServer} from 'node:net'
 import {fork,spawn} from 'node:child_process'
 import {once} from 'node:events'
 import {connect,Queue,migrate,QueueFull} from '../queue.mjs'
 import {Runtime} from '../runtime.mjs'
 import {executeOne,reap} from '../controller.mjs'
 import {identifier,hash,POLICY} from '../protocol.mjs'
-import {workerName} from '../worker-profile.mjs'
+import {workerName,createWorkerArgs} from '../worker-profile.mjs'
 import {listenHosted} from '../server.mjs'
 import {chromium} from 'playwright-core'
 
@@ -42,6 +44,29 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
  })
  await t.test('actual process/FD/aggregate disk limits reject excess while ordinary files work',async()=>{
   for(const op of ['pids','fds','disk'])await runProbe(op,r=>{assert.equal(r.code,0,r.stderr);assert.equal(JSON.parse(r.stdout).rejected,true,op)},30000)
+  await runProbe('file',r=>assert(r.code!==0||JSON.parse(r.stdout).rejected),30000)
+ })
+ await t.test('real negative control: weakening a copied network profile exposes only the fake loopback fixture',async()=>{
+  const listener=createServer(socket=>socket.end());await new Promise(r=>listener.listen(18726,'127.0.0.1',r))
+  try{
+   await runProbe('network-fixture',r=>assert.equal(JSON.parse(r.stdout).denied,true))
+   const job={id:identifier(),lease_id:identifier()},args=createWorkerArgs({jobId:job.id,leaseId:job.lease_id,imageId:probe.imageId},await probe.image())
+   args[args.indexOf('--network')+1]='host'
+   const id=await probe.checked(args)
+   try{
+    const c=await probe.inspect(id);assert.throws(()=>probe.verify(c,job))
+    const result=await probe.call(['start','--attach','--interactive',id],{input:'{"op":"network-fixture"}'})
+    assert.equal(result.code,0);assert.equal(JSON.parse(result.stdout).denied,false,'weakened actual network must be detected')
+   }finally{await probe.remove(job)}
+  }finally{await new Promise(r=>listener.close(r))}
+ })
+ await t.test('hostile ancestor swaps stay in disposable namespace; unrelated fake host marker unchanged',async()=>{
+  const marker=resolve('.tmp/fake-host-marker25'),job={id:identifier(),lease_id:identifier()};await writeFile(marker,'FAKE_HOST_MARKER_25',{flag:'wx'})
+  try{
+   const id=await probe.create(job),r=await probe.call(['start','--attach','--interactive',id],{input:JSON.stringify({op:'ancestor',marker})})
+   assert.equal(r.code,0);assert.deepEqual(JSON.parse(r.stdout),{denied:true,hostDenied:true})
+   await probe.remove(job);assert.equal(await readFile(marker,'utf8'),'FAKE_HOST_MARKER_25')
+  }finally{await probe.remove(job);await rm(marker)}
  })
  await t.test('actual cgroup OOM and bounded attached raw-log flood; no persisted log driver',async()=>{
   await runProbe('memory',(r,c)=>{assert.notEqual(r.code,0);assert.equal(c.State.OOMKilled,true)},30000)
@@ -139,6 +164,10 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
   try{
    assert.equal((await request('/api/jobs')).status,401)
    const form=new FormData();form.set('theme','scaffold');form.set('wxr',new Blob([xml]),'private-source.xml')
+   const sql=await readFile(new URL('../../../fixtures/media-archive/database.sql',import.meta.url))
+   const media=await readFile(new URL('../../../fixtures/media-archive/uploads.zip',import.meta.url))
+   form.set('sql',new Blob([Buffer.concat([sql,Buffer.from('\n-- FAKE_PRIVATE_SQL_25\n')])]),'private-dump.sql')
+   form.set('media',new Blob([media]),'private-upload.zip')
    const response=await request('/api/jobs',tokenA,{method:'POST',body:form});assert.equal(response.status,202,await response.clone().text())
    const {job}=await response.json();assert.equal((await request('/api/jobs/'+job.id,tokenB)).status,404)
    assert.equal((await request('/api/jobs/'+job.id,tokenB,{method:'DELETE'})).status,404)
@@ -148,8 +177,8 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
    assert.equal(rows.input,null);assert.equal(await runtime.inspect(workerName(job.id,rows.lease_id)),undefined)
    const artifact=JSON.parse(await q.forOwner('owner-A').artifact(job.id,done.artifact.digest))
    assert(artifact.files.some(f=>Buffer.from(f.data,'base64').toString().includes('Private worker fixture marker.')))
-   const publicText=JSON.stringify(done)+JSON.stringify(artifact)
-   for(const forbidden of ['FAKE_TOKEN_SENTINEL_25','/work/input','raw stdout','dump.sql','private-source.xml'])assert(!publicText.includes(forbidden),forbidden)
+   const publicText=JSON.stringify(done)+artifact.files.map(f=>Buffer.from(f.data,'base64').toString()).join('\n')
+   for(const forbidden of ['FAKE_TOKEN_SENTINEL_25','FAKE_PRIVATE_SQL_25','/work/input','raw stdout','dump.sql','private-source.xml'])assert(!publicText.includes(forbidden),forbidden)
    const file=artifact.files.find(f=>f.path.endsWith('.html'));assert(file)
    const path=`/preview/${job.id}/${done.artifact.digest}/${file.path}`
    assert.equal((await request(path,undefined,{},true)).status,401)

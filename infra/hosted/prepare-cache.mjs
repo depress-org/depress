@@ -8,8 +8,13 @@ const migration = await runMigrate({input:resolve('infra/hosted/fixture.xml'),ou
 if (!migration.qualityPassed) throw new Error('Trusted fixture migration failed')
 const home = resolve('.tmp/cache-home'); await mkdir(home,{recursive:true})
 const install = await defaultSpawn('/usr/local/bin/npm',['install','--ignore-scripts','--legacy-peer-deps'],{
-  cwd:output,env:{...safeEnvironment(home),npm_config_cache:'/opt/cache'},timeoutMs:300000})
-if (install.code !== 0) throw new Error('Trusted cache preparation failed')
+  cwd:output,env:{...safeEnvironment(home),npm_config_cache:'/opt/cache',npm_config_fetch_timeout:'60000',npm_config_fetch_retries:'2'},timeoutMs:300000})
+if (install.code !== 0) {
+  // Fixed public fixture + credential-free preparation environment ONLY. This is
+  // never a workload/public error surface; retain real diagnostics for CI repair.
+  console.error(install.stderr.slice(-4096))
+  throw new Error('Trusted cache preparation failed')
+}
 await writeFile('/opt/scaffold-package.json',await readFile(output+'/package.json'))
 await writeFile('/opt/scaffold-lock.json',await readFile(output+'/package-lock.json'))
 await rm(resolve('.tmp'),{recursive:true,force:true})
