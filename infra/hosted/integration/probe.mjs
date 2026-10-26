@@ -12,6 +12,7 @@ if(op==='boundary'){
   const output={nonroot:process.getuid()===65532,capless:/CapEff:\s+0+\n/.test(status),seccomp:/Seccomp:\s+2/.test(status),nonewprivs:/NoNewPrivs:\s+1/.test(status),
     readonly:denied('/opt/depress/hostile-write')&&denied('/etc/hostile-write'),noSocket:!existsSync('/var/run/docker.sock'),network,
     noCredentials:!env.some(k=>/TOKEN|SECRET|PASSWORD|DATABASE|AUTH|COOKIE|SSH|AWS|GITHUB/i.test(k)),
+    apparmor:readFileSync('/proc/self/attr/current','utf8').trim().startsWith('docker-default'),
     memory:readFileSync('/sys/fs/cgroup/memory.max','utf8').trim(),swap:readFileSync('/sys/fs/cgroup/memory.swap.max','utf8').trim(),
     pids:readFileSync('/sys/fs/cgroup/pids.max','utf8').trim(),cpu:readFileSync('/sys/fs/cgroup/cpu.max','utf8').trim(),
     cgroupReadonly:denied('/sys/fs/cgroup/pids.max'),work:Number(statfsSync('/work').blocks*statfsSync('/work').bsize),tmp:Number(statfsSync('/tmp').blocks*statfsSync('/tmp').bsize),

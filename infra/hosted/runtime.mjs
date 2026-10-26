@@ -44,13 +44,20 @@ export class Runtime {
     const h = c.HostConfig, env = c.Config.Env
     const expected = Object.entries(WORKER_ENVIRONMENT).map(([k,v]) => `${k}=${v}`).sort()
     const ulimits = {cpu:WORKER_LIMITS.cpuSeconds,nofile:WORKER_LIMITS.openFiles,fsize:WORKER_LIMITS.fileBytes,core:0}
+    // Docker can expose the requested tmpfs mounts in Mounts as well as Tmpfs.
+    // Only anonymous memory mounts at these exact destinations are permitted;
+    // HostConfig.Tmpfs is independently matched against the bounded profile.
+    const mounts = Array.isArray(c.Mounts) && c.Mounts.length <= 2 &&
+      new Set(c.Mounts.map(m => m.Destination)).size === c.Mounts.length &&
+      c.Mounts.every(m => m.Type === 'tmpfs' && !m.Source && !m.Name && m.RW === true && ['/work','/tmp'].includes(m.Destination))
     const checks = {
       identity: c.Config.User === '65532:65532' && c.Config.WorkingDir === '/work',
       environment: Array.isArray(env) && JSON.stringify([...env].sort()) === JSON.stringify(expected),
-      filesystem: h.ReadonlyRootfs && !h.Privileged && !c.Mounts?.length && !h.Binds?.length,
+      filesystem: h.ReadonlyRootfs && !h.Privileged && mounts && !h.Binds?.length,
       namespaces: h.NetworkMode === 'none' && !h.PidMode && h.IpcMode === 'private' && h.CgroupnsMode === 'private' && h.Init,
       capabilities: JSON.stringify(h.CapDrop) === '["ALL"]' && !h.CapAdd?.length,
-      lsm: h.SecurityOpt?.includes('no-new-privileges=true') && !h.SecurityOpt?.some(s => /unconfined/i.test(s)) && c.AppArmorProfile && c.AppArmorProfile !== 'unconfined',
+      lsm: h.SecurityOpt?.includes('no-new-privileges=true') && !h.SecurityOpt?.some(s => /unconfined/i.test(s)) &&
+        (c.AppArmorProfile === 'docker-default' || c.State?.Status === 'created' && h.SecurityOpt.includes('apparmor=docker-default')),
       devicesPorts: !h.Devices?.length && !h.DeviceRequests?.length && !Object.keys(h.PortBindings ?? {}).length,
       resources: h.PidsLimit === WORKER_LIMITS.pids && h.Memory === WORKER_LIMITS.memoryBytes && h.MemorySwap === h.Memory && h.NanoCpus === WORKER_LIMITS.cpu * 1e9 && h.ShmSize === 16777216,
       ulimits: Array.isArray(h.Ulimits) && h.Ulimits.length === Object.keys(ulimits).length && Object.entries(ulimits).every(([name,value]) => h.Ulimits.some(u => u?.Name === name && u.Soft === value && u.Hard === value)),

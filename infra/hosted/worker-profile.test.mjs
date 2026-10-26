@@ -39,7 +39,7 @@ test('filesystem, UID, namespace and capability policy has no host mounts or soc
   assert.equal(value(args, '--ipc'), 'private')
   assert.equal(value(args, '--cgroupns'), 'private')
   assert.equal(value(args, '--cap-drop'), 'ALL')
-  assert.equal(value(args, '--security-opt'), 'no-new-privileges=true')
+  assert.deepEqual(values(args, '--security-opt'), ['no-new-privileges=true','apparmor=docker-default'])
   for (const forbidden of ['--mount', '--volume', '-v', '--volumes-from', '--device', '--privileged', '--use-api-socket', '--publish', '-p', '--publish-all', '--pid', '--userns', '--cap-add', '--env-file', '--runtime'])
     assert.ok(!args.includes(forbidden), forbidden)
   assert.deepEqual(values(args, '--tmpfs'), [

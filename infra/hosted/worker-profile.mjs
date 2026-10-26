@@ -109,6 +109,7 @@ export function createWorkerArgs(options, inspectedImage) {
     '--cgroupns', 'private',
     '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges=true',
+    '--security-opt', 'apparmor=docker-default',
     '--pids-limit', String(WORKER_LIMITS.pids),
     '--cpus', String(WORKER_LIMITS.cpu),
     '--memory', String(WORKER_LIMITS.memoryBytes),

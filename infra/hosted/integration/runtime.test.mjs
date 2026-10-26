@@ -48,7 +48,7 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
  await t.test('actual namespaces/cgroups/credential-free filesystem and deny-default egress',async()=>{
   await runProbe('boundary',(r)=>{
    assert.equal(r.code,0,r.stderr);const p=JSON.parse(r.stdout)
-   for(const key of ['nonroot','capless','seccomp','nonewprivs','readonly','noSocket','network','noCredentials','cgroupReadonly','privatePid'])assert.equal(p[key],true,key)
+   for(const key of ['nonroot','capless','seccomp','nonewprivs','readonly','noSocket','network','noCredentials','cgroupReadonly','privatePid','apparmor'])assert.equal(p[key],true,key)
    assert.equal(p.memory,'2147483648');assert.equal(p.swap,'0');assert.equal(p.pids,'64');assert.equal(p.cpu,'100000 100000')
    assert.equal(p.work,1073741824);assert.equal(p.tmp,16777216)
   })

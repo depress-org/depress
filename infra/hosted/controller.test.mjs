@@ -39,10 +39,26 @@ test('effective runtime requires exact shared memory and all soft/hard ulimits',
   }
   const c=config();c.HostConfig.Ulimits.reverse();assert(runtime.verify(c,job))
 })
+test('effective mount metadata permits only the declared bounded anonymous tmpfs, never a host source or extra mount',()=>{
+  const runtime=new Runtime(image),c=config()
+  c.Mounts=[{Type:'tmpfs',Source:'',Destination:'/work',RW:true},{Type:'tmpfs',Source:'',Destination:'/tmp',RW:true}]
+  assert(runtime.verify(c,job))
+  for(const mount of [{Type:'bind',Source:'/host',Destination:'/work',RW:true},{Type:'tmpfs',Source:'/host',Destination:'/work',RW:true},{Type:'tmpfs',Source:'',Destination:'/unbounded',RW:true},{Type:'volume',Source:'',Destination:'/work',RW:true}]){
+    const changed=config();changed.Mounts=[mount];assert.throws(()=>runtime.verify(changed,job))
+  }
+  c.Mounts.push({...c.Mounts[0]});assert.throws(()=>runtime.verify(c,job))
+})
+test('created AppArmor policy is explicit and running/exited workloads require effective confinement',()=>{
+  const runtime=new Runtime(image),c=config();c.AppArmorProfile='';c.State={Status:'created'}
+  assert.throws(()=>runtime.verify(c,job))
+  c.HostConfig.SecurityOpt.push('apparmor=docker-default');assert(runtime.verify(c,job))
+  for(const status of ['running','exited']){c.State.Status=status;assert.throws(()=>runtime.verify(c,job))}
+  c.AppArmorProfile='docker-default';assert(runtime.verify(c,job))
+})
 test('broker terminal transition occurs only AFTER confirmed exact-worker removal',async()=>{
   const events=[],artifact={kind:'preview-only',files:[{path:'index.html',data:'eA=='}]}
   const queue={claim:async()=>job,withJob:async(_id,fn)=>fn(),current:async()=>job,finish:async(_j,a)=>events.push(a?'done':'failed'),retry:async()=>events.push('retry')}
-  const runtime={create:async()=>id,call:async()=>({code:0,stderr:'',stdout:JSON.stringify({ok:true,artifact})}),remove:async()=>events.push('removed')}
+  const runtime={create:async()=>id,call:async()=>({code:0,stderr:'',stdout:JSON.stringify({ok:true,artifact})}),inspect:async()=>config(),verify:()=>true,remove:async()=>events.push('removed')}
   assert.equal(await executeOne(queue,runtime),true);assert.deepEqual(events,['removed','done'])
   events.length=0;runtime.remove=async()=>{throw new Error('uncertain')};await executeOne(queue,runtime);assert.deepEqual(events,['retry'])
   events.length=0;runtime.remove=async()=>events.push('removed');runtime.call=async()=>({code:0,stderr:'FAKE_TOKEN_25 /private',stdout:'raw stdout'})

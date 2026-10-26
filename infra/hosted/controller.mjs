@@ -3,12 +3,13 @@ import { WORKER_LIMITS } from './worker-profile.mjs'
 
 export async function executeOne(queue, runtime) {
   const job = await queue.claim(); if (!job) return false
-  let attached, output, launched = false
+  let attached, output, containerId, launched = false
   try {
     await queue.withJob(job.id, async () => {
       const current = await queue.current(job.id,job.lease_id)
       if (!current || current.state !== 'running' || Number(current.deadline_ms) <= Date.now()) return
       const id = await runtime.create(job)
+      containerId = id
       // Exact-ID start cannot resurrect a removed container; reaper shares this lock.
       attached = runtime.call(['start','--attach','--interactive',id], {
         input: current.input.toString(), timeoutMs: WORKER_LIMITS.wallTimeMs,
@@ -20,6 +21,9 @@ export async function executeOne(queue, runtime) {
     })
     if (launched) {
       const r = await attached
+      // Docker resolves effective AppArmor at start, not create. Reverify the
+      // exact runtime after execution before accepting any artifact bytes.
+      runtime.verify(await runtime.inspect(containerId),job)
       if (r.code === 0 && !r.stderr) output = result(r.stdout)
     }
   } catch { /* Public status is typed; raw stdout/errors never enter the DB. */ }
