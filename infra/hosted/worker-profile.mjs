@@ -7,11 +7,11 @@ export const WORKER_LIMITS = Object.freeze({
   cpu: 1,
   memoryBytes: 2147483648,
   pids: 64,
-  workBytes: 536870912,
+  workBytes: 1073741824,
   tempBytes: 16777216,
   cpuSeconds: 120,
   wallTimeMs: 180000,
-  fileBytes: 33554432,
+  fileBytes: 134217728,
   openFiles: 128,
   logBytes: 1048576,
 })
@@ -105,7 +105,7 @@ export function createWorkerArgs(options, inspectedImage) {
     '--ipc', 'private',
     '--shm-size', '16777216',
     // Docker's default PID namespace is private; --pid only overrides to host/container.
-    '--init',
+    '--init', '--interactive',
     '--cgroupns', 'private',
     '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges=true',
@@ -117,14 +117,10 @@ export function createWorkerArgs(options, inspectedImage) {
     '--ulimit', `nofile=${WORKER_LIMITS.openFiles}:${WORKER_LIMITS.openFiles}`,
     '--ulimit', `fsize=${WORKER_LIMITS.fileBytes}:${WORKER_LIMITS.fileBytes}`,
     '--ulimit', 'core=0:0',
-    '--tmpfs', `/work:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=4096,size=${WORKER_LIMITS.workBytes}`,
+    '--tmpfs', `/work:rw,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=65536,size=${WORKER_LIMITS.workBytes}`,
     '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=128,size=${WORKER_LIMITS.tempBytes}`,
-    // Source policy: local log driver is a rotating disk ring, not the
-    // public log API. Never export raw ring bytes; terminal removal must erase it.
-    '--log-driver', 'local',
-    '--log-opt', 'max-size=1m',
-    '--log-opt', 'max-file=1',
-    '--log-opt', 'compress=false',
+    // No persistent raw runtime log at all; attached output is capped in #16.
+    '--log-driver', 'none',
     ...Object.entries(WORKER_ENVIRONMENT).flatMap(([k, v]) => ['--env', `${k}=${v}`]),
     imageId,
   ]

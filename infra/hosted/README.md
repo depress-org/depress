@@ -1,67 +1,47 @@
-# #25 checkpoint — NOT a completed worker boundary
+# Private bounded hosted runtime — #25
 
-Baseline: merged Integration D `c70ad9a23b57f4d012e2e3a10ef5c88800b3e7f0`.
-Canonical acceptance: <https://github.com/depress-org/depress/issues/25>.
+Canonical: <https://github.com/depress-org/depress/issues/25>. **Public/credentialed production remains NO-GO.** This is source configuration and a disposable-runner implementation, not a deployed service or production approval. The existing web/bot entrypoints remain explicitly local scaffolds; do not run them as the hosted worker boundary.
 
-**Public/credentialed hosted operation remains NO-GO.** This directory contains a tested, source-level OCI profile renderer and image-default metadata validator only. No launcher, queue, image, daemon configuration, service, public listener or deployment has been created. It is not wired into API/bot execution. Do not treat passing profile tests or this checkpoint as #25 acceptance.
+Preserved initial checkpoint `b8e5712`, normally reconciled with reviewed main `b3a8e65`. Operator authorization covers source/PR/workflow and disposable GitHub-hosted OCI + fake-only PostgreSQL tests within existing quotas. It does not authorize shared Rocky Docker/cgroups, host security changes, production listeners/configuration, credentials, provider deployment, publishing images/packages, or spending.
 
-## Actual verified work
+## Architecture and trust
 
-- Read canonical #25, PR-03 audit, integrated #16 process helpers, #23 owner capabilities, #24 converter/report boundaries, and original architecture decision `t_d850a35e`.
-- Fresh isolated clone and branch `security/25-private-workers`; main and upstream implementations unchanged. Pinned Rocket submodule initialized at its existing committed revision.
-- Cold install with Node 20.20.2/npm 10.8.2: `npm ci --legacy-peer-deps` PASS. Existing dependency advisories are not waived or fixed.
-- Existing `npm run build`, `npm run typecheck`, `npm run lint`, security audit regressions 5/5 PASS.
-- Existing canonical `npm test` with submodules: 418 passed across CLI103/job-core33/bot47/web63/engine172, five existing coverage gates PASS. An earlier run without the Rocket submodule had 405 tests; it is superseded by the submodule-complete run, not misrepresented as 418.
-- `node --test infra/hosted/worker-profile.test.mjs`: 34/34 PASS under Node20. This is a separate explicit contract suite, not yet added to root test/CI scripts.
-- Mutation proof: copy the current profile and tests into `.tmp/profile-mutation`; change network `none` to `host`. Same suite exits1 with the filesystem/network boundary test failing. Original source remains unchanged and green.
-- Independent short reasoning/source review found no blocking defect in the limited renderer scope; this is NOT the board's final independent implementation review or runtime attestation.
+- `http.mjs` / `server.mjs`: dedicated authenticated admission/read/cancel/preview adapter. Imports the existing #23 streaming multipart/auth/admission modules, NOT the CLI/job pipeline. No Docker socket or provider credential belongs in this process. `server.mjs` binds only where explicitly called; the integration uses loopback. No production TLS/proxy deployment is supplied.
+- `queue.mjs` / `schema.sql`: dedicated PostgreSQL bounded queue with immutable owner identity, transactional global/owner/byte admission, one running slot, lease fencing, cancellation, expiring artifacts/metadata and durable cleanup attempts. `forOwner(serverDerivedOwnerId)` is the only request-facing capability; it cannot patch ownership/status/path fields. The root queue is trusted controller authority. It does not replace the existing #23 JobStore used by `runJob` inside a workload.
+- `runtime.mjs` / `controller.mjs`: trusted socket-owning broker and **independent reaper process**. Claim and deterministic job+lease name precede creation. Per-job DB advisory locks serialize create/start/removal across controllers; immutable container IDs and verified job/lease/image/labels scope removal. A removed ID cannot be restarted by a delayed attach. Capacity and inputs are released only after confirmed removal. Removal failure retains the running slot and increments a durable retry counter.
+- `control.mjs`: CI-only executable guard, separate broker/reaper roles. During DB outage the reaper discovers only its configured image's owned workloads and removes them; new claims/start require DB availability. On restoration, expired/fenced rows reconcile. No raw DB/runtime errors are logged. Image replacement while jobs exist is not supported: retain the configured image and reaper through terminal reconciliation; a production upgrade/runbook requires a separate gate.
+- `workload.mjs`: one private credential-free disposable workload. Reuses #22 archive ingestion, #24 native safe conversion and existing owner-scoped `runJob`; builds through #16 `buildSite`/`defaultSpawn`. The only process-helper extension is bounded optional stdin, with no shell or argv interpolation. SQL is parsed, never executed.
+- Inputs and artifacts are bounded owned DB bytes. Workloads receive JSON on stdin and return one bounded structured artifact envelope. There is no host mount, host upload/output tree, `docker cp`, or host extraction of workload output. Workload-controlled ancestors cannot race controller deletion because no such filesystem is shared. Public artifacts never interpret paths on the host.
 
-## What the profile requests (not runtime-proven enforcement)
+## Fixed initial limits
 
-`createWorkerArgs({jobId, leaseId, imageId}, inspectedImage)` returns `docker create` arguments; it never invokes Docker. All options and IDs are validated; the broker must obtain the inspection metadata itself for its explicitly approved image, not trust request data.
+| Boundary | Source policy |
+|---|---|
+| Durable queue | 32 retained rows globally, 4 per owner (including terminal metadata), 16MiB total serialized input+artifact bytes; serialized admission/claim/finish/sweep |
+| Upload | #23 bounded streaming multipart, 1.5MB actual body, 1MiB combined decoded files, 10s; four global durable upload reservations / one per owner, plus process-local request/rate caps |
+| Execution | one running/stopping job across controllers; nonroot65532, readonly root, no mounts/devices/socket/ports, network none; private PID/IPC/cgroup namespaces, init, cap-dropALL, no-new-privileges, default seccomp and AppArmor required |
+| CPU/process/memory | 1 CPU quota, 120 CPU seconds per process, PID64, memory2GiB and no additional swap, FD128, file128MiB, core0 |
+| Writable filesystem | work tmpfs1GiB/65536 inodes; tmp16MiB/128 inodes; shm16MiB. Work permits execution because esbuild/native build tools require it; noexec is not an interpreter sandbox. Writable memory counts against the cgroup. No host persistent writable workload layer. |
+| Time/logs | 180s whole-job deadline enforced by separate reaper; #16 attached capture bounded. Docker log-driver none: raw workload logs are never persisted/exported; observers/API expose fixed statuses only. |
+| Lifecycle | queued abandon10min; all input/XML/SQL/ZIP/intermediate data removed from live DB after terminal removal; artifact15min, metadata1h. Reaper runs every250ms; deletion retries retain capacity. |
+| Preview | separate-site origin (not a sibling bullwinkle.space subdomain), distinct preview credentials; owner+job+digest+expiry on every read. No URL/cookie tokens/CORS, no-store/nosniff/no-referrer, CSP HTTP sandbox without scripts/same-origin/forms/objects/connect, no service workers. Browser-native Basic auth (`preview` / preview credential) or bearer authentication. No iframe embedding. |
 
-- Locally pinned immutable image ID, pull never; exact allowed image environment and no declared anonymous volumes. A digest and metadata checks do not audit image provenance or image files for secrets.
-- Nonroot65532, readonly root, no host paths/volumes/devices/socket/ports, no network, private IPC/cgroup/default PID namespaces, init reaping, all capabilities dropped, no-new-privileges; default runtime seccomp/LSM still must be verified.
-- One CPU quota, 2GiB RAM with equal memory+swap setting, PID64; 120-second **per-process** RLIMIT_CPU, FD128, individual file32MiB, no core dumps.
-- Work tmpfs512MiB/4096 inodes; `/tmp`16MiB/128 inodes; shared memory16MiB. `TMPDIR=/work/tmp` consumes the work budget, not the separate `/tmp` budget. Aggregate RAM/disk/CPU still need real runtime checks and admission budgets.
-- Local driver rotation1MiB/max-file1/compression off, not an exact total host-disk bound. It is neither public redaction nor lifecycle expiry.
-- The proposed 180-second wall clock is a policy constant only: the durable broker/reaper must enforce it. No pretend timeout enforcement.
-- Fixed credential-free/offline workload environment. CLI argument additions do not erase image-baked Env, hence the mandatory metadata validation. Image entrypoint/rootfs remain trusted-image review responsibilities.
+Only scaffold is admitted until other themes have separately proven offline graphs/budgets. Trusted public dependency preparation occurs during CI image build, never in a credential-bearing job. The image has no inherited base Env/volumes, and is addressed by locally inspected immutable image ID. `prepare-cache.mjs` prepares the exact scaffold lock/cache; builds must match that dependency graph and run offline. Missing cache/content fails closed; remote media is not granted network access. The production image supply-chain review and digest selection remain human-gated, not implied by a digest alone.
 
-## Established architecture, not a new decision request
+CF14 output is Workers. A full-output-aware trusted workload returns **preview-only** client files, never relabels stripped client output as a deployable static artifact. Strict envelope/path/count/byte/MIME validation, content digest and ownership are server-selected. Reports/source manifests/inputs/host paths/raw logs are not exported. The current 1MiB artifact budget intentionally fails large sites rather than returning truncated success.
 
-Preserve the existing Postgres jobs-table/single-worker recommendation and `forOwner(serverDerivedOwnerId)` semantics. Retain #16 `defaultSpawn`/typed process contracts and #24 conversion/report behavior; do not introduce a second extractor or weaken the converter. A runtime socket belongs only to a narrow trusted broker, never the credential-bearing API/bot or job. Each workload has a private disposable tree; no hostile job can rename controller ancestors if it cannot mount them.
+`deploy-capability.mjs` is a fake-tested, single-use owner/job/digest/exact-target/expiry capability seam, not a provider implementation or an HTTP mint endpoint. Credentials can exist only inside an injected deploy-only closure. Preview-only artifacts are rejected. #38 owns durable provider protocol/idempotency/rollback; its unreviewed branch is not consumed. No real provider transport is wired or invoked.
 
-Deny-default network is the initial boundary. Current `buildSite` creates a lock and installs dependencies, so builds need a separately prepared trusted offline cache/image. Remote media or uncached installs must not silently get unrestricted network. Validate that conservative cache/resource budgets actually support the chosen themes; do not turn resource failure into success or mislabel a skipped build as accepted. No deployment capability is authorized by this checkpoint.
+## Storage and deletion meaning
 
-## Genuine remaining authorization gate
+The CI database sits on its own 512MiB loop-backed ext4 filesystem, mounted only on the disposable runner. PGDATA is an empty child directory, not ext4's lost+found root. This supplies an independently exercised physical disk ceiling in addition to logical queue bounds and survives container restart. **Never mount or format a shared-host volume using this workflow.** A future production database requires its own dedicated quota, access control, encryption/backups/retention and operational acceptance; the source queue is not a proof of a provider's physical erasure guarantees.
 
-Read-only discovery found a shared rootful Docker29.8.1 daemon (`/var/lib/docker`, builtin seccomp/AppArmor, cgroupv2, no rootless SecurityOptions). Bubblewrap0.11.1 namespace launch succeeded, while a separate user-namespace `uid_map` probe failed EPERM. The current gateway service's own cgroup is writable; the cgroup root is not. This is **not** proof that no rootless implementation is possible. It is also not permission to change gateway cgroups or use the shared daemon for adversarial resource tests. No images/containers were inspected for secrets, and none were created or started.
+Expiry deletes live owned rows/bytea, not forensic WAL/dead-tuple/backups erasure. No source content is put into public error/audit records; database logging must remain statement/content-free. The runner's destruction ends test volume/log lifetime. No claims about secure erase, host-kernel isolation from a hostile kernel exploit, microVM equivalence or production readiness are made.
 
-Ask Bullwinkle for one narrow permission, not a queue redesign:
+## Executable evidence and remaining gate
 
-1. **Recommended:** authorize ephemeral OCI + fake-credential Postgres integration tests on disposable GitHub-hosted runners, including adding the source workflow; no shared-host Docker use, live secrets, cloud deploys, public listeners or spending commitments.
-2. Alternatively, provide/authorize a dedicated disposable VM/rootless runtime for those tests. No host-service/security configuration changes without separate approval.
+Local Node22.23.4/npm10.8.2: cold root installation; build/typecheck/lint; canonical494 workspace tests with five unchanged coverage gates; security5; initial43 source-policy tests PASS. Preliminary independent source review found a deployment-capability race/expiry flaw and ext4 PGDATA initialization issue; fixes and concurrent/late-expiry/effective-ulimit tests bring the source suite to47 PASS. This is not runtime proof.
 
-Until that permission is explicit, do not infer it from a request for a PR/exact-head CI or repurpose the shared daemon. Source coding is possible; the unresolved issue is permission to exercise and prove the complete boundary, not a fabricated technical inability to write a queue. This card is incomplete and must not be completed or handed off as reviewed implementation.
+`.github/workflows/private-worker.yml` builds local worker/probe images without publishing, provisions only a fake Postgres instance and runs `integration/runtime.test.mjs`: actual FS/network/cgroup/CPU/memory/process/FD/disk/log probes; queue bounds/fencing/restart; broker SIGKILL/independent reaper/DB outage/cancel/retry; unrelated container preservation; real authenticated HTTP to runJob+offline build, private artifact expiry and browser active-content isolation. Raw fake-only results and screenshot have three-day CI retention. Tests hard-fail outside the explicitly authorized GitHub disposable/fake fixture.
 
-## Acceptance still NOT implemented/verified
-
-| #25 requirement | Remaining work |
-| --- | --- |
-| Durable bounded queue | Postgres implementation, transactional global/per-owner admission, immutable owner capabilities, bounded rows/bytes, atomic claim, fencing/leases and idempotency; real DB concurrency/restart tests |
-| Disposable workers | Trusted secret-free image and broker; actual cgroup/namespaces/FS/network/process/CPU/memory/disk/log/time probes; real migration/build through existing runJob/process API |
-| Cancellation/crash/abandon | Durable cancellation and reaper; kill exact fenced worker before releasing capacity; broker/worker/DB failure and restart probes |
-| Private lifecycle | Owned XML/SQL/media/intermediate/artifact/log storage, success/failure/abandon expiry, contained deletion with durable retries; unrelated-path and ancestor-swap tests |
-| Redaction/public output | Minimal typed public statuses, bounded redacted logs, verified public artifact allowlist; fake-token/raw-path/stdout/stderr negative tests |
-| Preview | Separate authenticated active-content origin and owner-bound artifact reads, restrictive CSP/cookie/CORS/service-worker isolation; real two-owner HTTP/browser tests |
-| Deploy-only capability | Bind approved owner/artifact digest/target/project/expiry, trusted static-artifact-only deploy adapter, audit trail; no live provider calls or approval implied |
-| Delivery | Focused PR refs#25, exact-head CI and independent board review; no selfmerge or production rollout |
-
-Raw local logs are under `.tmp/`: install25.log, baseline-gates25.log, baseline-tests25-with-submodules.log, worker-profile-tests.log and profile-negative25.log. No token values or live secret data belong in durable handoffs.
-
-## References
-
-- <https://docs.docker.com/engine/security/rootless/>
-- <https://docs.docker.com/engine/containers/resource_constraints/>
-- <https://docs.docker.com/engine/logging/drivers/local/>
+Until actual CI logs, negative-control evidence and the same-card independent QA review are accepted, #25 is **incomplete**. Do not substitute profile/config tests for OS proof. No merge or deployment is authorized by this source checkpoint.

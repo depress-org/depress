@@ -11,7 +11,7 @@
     "build": "npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress --if-present && npm run build --workspaces --if-present",
     "dev": "npm run dev --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "node scripts/test-workspaces.mjs",
+    "test": "node scripts/test-workspaces.mjs && node --test infra/hosted/*.test.mjs",
     "test:unit": "npm run test --workspaces --if-present",
     "test:coverage": "npm test",
     "test:integration": "node scripts/generated-site.mjs",

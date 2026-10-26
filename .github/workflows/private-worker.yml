@@ -1,0 +1,67 @@
+name: Private worker boundary
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: private-worker-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  boundary:
+    name: Disposable OCI and Postgres boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TMPDIR: ${{ github.workspace }}/.tmp
+      DEPRESS25_TEST_RUNTIME: ephemeral-fake-only
+      DEPRESS25_TEST_DATABASE: postgres://postgres:FAKE_TEST_ONLY_25@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps && npm ci --prefix infra/hosted --ignore-scripts
+      - run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress --workspace=@depress-org/job-core --workspace=@depress-org/web
+      - name: Build local secret-free images; never publish
+        run: |
+          docker build --target worker -f infra/hosted/Dockerfile -t depress25-worker .
+          docker build --target probe -f infra/hosted/Dockerfile -t depress25-probe .
+          echo "DEPRESS25_TEST_IMAGE=$(docker image inspect --format '{{.Id}}' depress25-worker)" >> "$GITHUB_ENV"
+          echo "DEPRESS25_PROBE_IMAGE=$(docker image inspect --format '{{.Id}}' depress25-probe)" >> "$GITHUB_ENV"
+      - name: Fake-only Postgres on a dedicated bounded disposable filesystem
+        run: |
+          truncate -s 512M .tmp/postgres25.img
+          mkfs.ext4 -q -F .tmp/postgres25.img
+          mkdir .tmp/postgres25
+          sudo mount -o loop,nodev,nosuid,noexec .tmp/postgres25.img .tmp/postgres25
+          docker run -d --name postgres25 --memory 512m --cpus 1 --pids-limit 128 --mount type=bind,src="$PWD/.tmp/postgres25",dst=/var/lib/postgresql/data -p 127.0.0.1:5432:5432 -e PGDATA=/var/lib/postgresql/data/db -e POSTGRES_PASSWORD=FAKE_TEST_ONLY_25 postgres:16.10-bookworm -c max_wal_size=64MB -c min_wal_size=32MB -c shared_buffers=32MB -c logging_collector=off -c log_statement=none
+          for i in $(seq 1 30); do if docker exec postgres25 pg_isready -U postgres; then exit 0; fi; sleep 1; done
+          exit 1
+      - name: Actual runtime, DB, faults, two-owner HTTP and isolated browser proofs
+        run: node --test infra/hosted/*.test.mjs infra/hosted/integration/*.test.mjs 2>&1 | tee .tmp/private-worker-runtime.log
+        shell: bash --noprofile --norc -e -o pipefail {0}
+      - name: Real dedicated disk ceiling; no writes outside disposable PG volume
+        run: |
+          if docker exec postgres25 sh -c 'dd if=/dev/zero of=/var/lib/postgresql/data/contained-quota-probe bs=1048576 count=600'; then echo 'Expected ENOSPC did not occur'; exit 1; fi
+          docker exec postgres25 rm /var/lib/postgresql/data/contained-quota-probe
+          df -h .tmp/postgres25
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: private-worker-fake-only-evidence
+          retention-days: 3
+          path: |
+            .tmp/private-worker-runtime.log
+            .tmp/preview25.png
+      - name: Remove only disposable test resources
+        if: always()
+        run: |
+          docker rm -f postgres25 || true
+          if mountpoint -q .tmp/postgres25; then sudo umount .tmp/postgres25; fi

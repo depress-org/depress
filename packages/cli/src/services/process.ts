@@ -20,6 +20,8 @@ export interface SpawnOptions {
   env: NodeJS.ProcessEnv
   timeoutMs?: number
   maxOutputBytes?: number
+  /** Optional bounded transport input, never interpolated into shell/argv. */
+  input?: string
 }
 export type SpawnFn = (
   cmd: string,
@@ -60,6 +62,8 @@ function release() {
 
 /** Shell-free, bounded capture, bounded concurrency and whole process-group timeout. */
 export const defaultSpawn: SpawnFn = async (cmd, args, opts) => {
+  if (opts.input !== undefined && (typeof opts.input !== 'string' || Buffer.byteLength(opts.input) > 4_194_304))
+    throw new ServiceError('PROCESS_INPUT_LIMIT', 'Child process input limit exceeded')
   await acquire()
   try {
     return await new Promise<SpawnResult>((resolve, reject) => {
@@ -67,7 +71,7 @@ export const defaultSpawn: SpawnFn = async (cmd, args, opts) => {
         cwd: opts.cwd,
         env: opts.env,
         shell: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
         detached: process.platform !== 'win32',
       })
       let stdout = '',
@@ -114,6 +118,9 @@ export const defaultSpawn: SpawnFn = async (cmd, args, opts) => {
       }
       child.stdout.on('data', (c) => collect(c, 'stdout'))
       child.stderr.on('data', (c) => collect(c, 'stderr'))
+      // EPIPE is ordinary when a bounded child exits before consuming its input.
+      child.stdin.on('error', () => {})
+      child.stdin.end(opts.input)
       child.on('error', () => {
         clearTimeout(timer)
         reject(

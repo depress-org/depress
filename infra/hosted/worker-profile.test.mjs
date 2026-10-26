@@ -43,7 +43,7 @@ test('filesystem, UID, namespace and capability policy has no host mounts or soc
   for (const forbidden of ['--mount', '--volume', '-v', '--volumes-from', '--device', '--privileged', '--use-api-socket', '--publish', '-p', '--publish-all', '--pid', '--userns', '--cap-add', '--env-file', '--runtime'])
     assert.ok(!args.includes(forbidden), forbidden)
   assert.deepEqual(values(args, '--tmpfs'), [
-    '/work:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=4096,size=536870912',
+    '/work:rw,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=65536,size=1073741824',
     '/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=128,size=16777216',
   ])
 })
@@ -53,16 +53,16 @@ test('profile requests finite CPU/RAM/swap/PID/file/FD limits without disabling 
   assert.equal(value(args, '--pids-limit'), '64')
   assert.equal(value(args, '--memory'), '2147483648')
   assert.equal(value(args, '--memory-swap'), value(args, '--memory'))
-  assert.deepEqual(values(args, '--ulimit'), ['cpu=120:120', 'nofile=128:128', 'fsize=33554432:33554432', 'core=0:0'])
+  assert.deepEqual(values(args, '--ulimit'), ['cpu=120:120', 'nofile=128:128', 'fsize=134217728:134217728', 'core=0:0'])
   assert.ok(!args.includes('--oom-kill-disable'))
   assert.ok(!args.includes('--oom-score-adj'))
   for (const v of Object.values(WORKER_LIMITS)) assert.ok(Number.isSafeInteger(v) && v > 0)
   assert.equal(WORKER_LIMITS.wallTimeMs, 180000) // broker duty; NOT enforced by this renderer
 })
 
-test('raw local log ring is finite; profile does not pretend it is public redaction/expiry', () => {
-  assert.equal(value(args, '--log-driver'), 'local')
-  assert.deepEqual(values(args, '--log-opt'), ['max-size=1m', 'max-file=1', 'compress=false'])
+test('no raw runtime log is persisted; attached capture is a separate bound', () => {
+  assert.equal(value(args, '--log-driver'), 'none')
+  assert.deepEqual(values(args, '--log-opt'), [])
 })
 
 test('job environment is explicit, offline and does not inherit fake broker credentials', () => {
