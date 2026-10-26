@@ -63,6 +63,8 @@ jobs:
             .tmp/private-worker-runtime.log
             .tmp/preview25.png
             .tmp/preview25-generated.png
+            .tmp/preview25-svg.png
+            .tmp/preview25-svg-receipt.json
       - name: Remove only disposable test resources
         if: always()
         run: |

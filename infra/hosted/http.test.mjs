@@ -34,7 +34,8 @@ test('active SVG preview is authenticated, owner-bound and sandboxed by HTTP hea
  const{handler}=fixture(),url=`https://preview.example.net/preview/${id}/${digest}/active.svg`
  assert.equal((await handler(new Request(url))).status,401)
  const response=await handler(new Request(url,{headers:{authorization:'Basic '+Buffer.from('preview:'+previewToken).toString('base64')}}))
- assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/svg+xml')
+ assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'text/html; charset=utf-8')
+ const html=await response.text();assert(html.includes('<img'));assert(html.includes('data:image/svg+xml;base64,'));assert(!html.includes('<svg'))
  for(const directive of ['sandbox;','default-src \'none\'','connect-src \'none\'','frame-ancestors \'none\''])assert(response.headers.get('content-security-policy').includes(directive))
  assert(!response.headers.get('content-security-policy').includes('allow-same-origin'));assert(!response.headers.has('set-cookie'));assert(!response.headers.has('access-control-allow-origin'))
  assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(response.headers.get('x-content-type-options'),'nosniff')

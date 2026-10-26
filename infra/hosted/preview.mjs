@@ -83,6 +83,14 @@ export function previewFile(artifact, requested, prefix) {
     return output.join('').replaceAll('<','\\3c ')
   }
   const raw=decode(file.data,POLICY.artifactBytes)
+  const svgImage=bytes=>bounded('data:image/svg+xml;base64,'+Buffer.from(bytes).toString('base64'))
+  if(file.path.endsWith('.svg')) {
+    // Never serve SVG as a top-level active document: sandbox/CSP do NOT
+    // confine its own link navigation. Image processing disables SVG links,
+    // scripts and external resources, even for SMIL/foreignObject payloads.
+    const body=Buffer.from(bounded('<!doctype html><meta charset="utf-8"><img alt="SVG preview" src="'+svgImage(raw)+'">'))
+    return {body,type:'text/html; charset=utf-8'}
+  }
   if(!file.path.endsWith('.html'))return {body:raw,type:mime(file.path)}
   // Enforce bounds DURING parsing: a post-parse walk is too late to prevent
   // htmlparser2's unmatched-close stack scans on deeply nested hostile input.
@@ -101,12 +109,40 @@ export function previewFile(artifact, requested, prefix) {
   const handler=new BoundedHandler()
   new Parser(handler).end(raw.toString('utf8'))
   const doc=handler.root
+  const svgNS='http://www.w3.org/2000/svg',htmlNS='http://www.w3.org/1999/xhtml',mathNS='http://www.w3.org/1998/Math/MathML'
+  const imageXML=(node,inherited=svgNS,depth=0,parentNS=svgNS)=>{
+    tick()
+    if(depth>PRESENTATION_LIMITS.elementDepth)throw new Error('Preview depth limit')
+    if(!node.attribs)return DomUtils.getOuterHTML(node,{xmlMode:true})
+    const name=node.name.toLowerCase()
+    const ns=name==='svg'?svgNS:name==='math'?mathNS:node.attribs.xmlns??inherited
+    const attrs={...node.attribs,...(ns!==parentNS?{xmlns:ns}:{})}
+    // Serialize a detached shell: foreign mode restores SVG attribute/name
+    // case, but must not switch descendants to HTML serialization at integration
+    // points (HTML void tags, empty attributes and raw text are not XML-safe).
+    const shell=DomUtils.getOuterHTML({...node,attribs:attrs,parent:null,children:[]},{xmlMode:ns===htmlNS?true:'foreign',selfClosingTags:false})
+    const end=shell.indexOf('>')+1
+    const childNS=ns===svgNS&&['foreignobject','desc','title'].includes(name)||ns===mathNS&&(['mi','mo','mn','ms','mtext'].includes(name)||name==='annotation-xml'&&/^(?:text\/html|application\/xhtml\+xml)$/i.test(attrs.encoding??''))?htmlNS:ns
+    return shell.slice(0,end)+node.children.map(child=>imageXML(child,childNS,depth+1,ns)).join('')+shell.slice(end)
+  }
   const visit=(nodes,depth=0)=>{
     if(depth>PRESENTATION_LIMITS.elementDepth)throw new Error('Preview depth limit')
     for(const node of [...nodes]) {
       tick()
       if(!node.attribs){if(node.children)visit(node.children,depth+1);continue}
       const attrs=node.attribs,name=node.name.toLowerCase()
+      if(name==='svg') {
+        // Snapshot the complete foreign subtree into image context, rather
+        // than chasing every SVG URL mutation or XML namespace alias. Only
+        // inert layout/accessibility attributes reach the parent HTML tree.
+        attrs.xmlns='http://www.w3.org/2000/svg'
+        attrs['xmlns:xlink']='http://www.w3.org/1999/xlink'
+        const src=svgImage(imageXML(node))
+        const layout=Object.fromEntries(['id','class','width','height','role','aria-label'].filter(key=>attrs[key]!==undefined).map(key=>[key,attrs[key]]))
+        if(attrs.style)layout.style=css(attrs.style,file.path,[],'declarationList')
+        node.name='img';node.type='tag';node.attribs={...layout,alt:attrs['aria-label']??'',src};node.children=[]
+        continue
+      }
       if(['base','iframe','object','embed'].includes(name) || name==='meta' && attrs['http-equiv']) {
         DomUtils.removeElement(node);continue
       }
