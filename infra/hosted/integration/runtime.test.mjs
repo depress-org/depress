@@ -26,8 +26,18 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms))
 async function until(fn,ms=10000){const end=Date.now()+ms;while(Date.now()<end){if(await fn())return;await pause(100)}assert.fail('Deadline exceeded')}
 async function reset(){await pool.query('TRUNCATE private_jobs25,private_uploads25')}
 const fakeEnv={PATH:'/usr/local/bin:/usr/bin:/bin',HOME:'/nonexistent',GITHUB_ACTIONS:'true',DEPRESS25_TEST_RUNTIME:'ephemeral-fake-only',DEPRESS25_TEST_DATABASE:process.env.DEPRESS25_TEST_DATABASE,DEPRESS25_TEST_IMAGE:process.env.DEPRESS25_TEST_IMAGE,DEPRESS25_PROBE_IMAGE:process.env.DEPRESS25_PROBE_IMAGE,FAKE_BROKER_SECRET:'FAKE_TOKEN_SENTINEL_25'}
+let observedFailure=false
 async function runProbe(op,verify,timeout=15000){
- const job={id:identifier(),lease_id:identifier()},id=await probe.create(job)
+ const job={id:identifier(),lease_id:identifier()};let id
+ try{id=await probe.create(job)}catch(error){
+  if(!observedFailure){
+   observedFailure=true;const c=await probe.inspect(workerName(job.id,job.lease_id))
+   // Only this freshly-created fake fixture's policy metadata, never a host
+   // environment, input, stdout, secret, bind source or unrelated container.
+   console.log(JSON.stringify({fixturePolicy:{error:error.message,user:c?.Config.User,envKeys:c?.Config.Env?.map(x=>x.split('=')[0]),mounts:c?.Mounts?.map(m=>({type:m.Type,destination:m.Destination})),apparmor:c?.AppArmorProfile,capDrop:c?.HostConfig.CapDrop,security:c?.HostConfig.SecurityOpt,pid:c?.HostConfig.PidMode,ipc:c?.HostConfig.IpcMode,cgroup:c?.HostConfig.CgroupnsMode,memory:c?.HostConfig.Memory,swap:c?.HostConfig.MemorySwap,cpu:c?.HostConfig.NanoCpus,pids:c?.HostConfig.PidsLimit,shm:c?.HostConfig.ShmSize,ulimits:c?.HostConfig.Ulimits}}))
+  }
+  throw error
+ }
  try{const r=await probe.call(['start','--attach','--interactive',id],{input:JSON.stringify({op}),timeoutMs:timeout,maxOutputBytes:1048576});await verify(r,await probe.inspect(id))}
  finally{await probe.remove(job)}
 }

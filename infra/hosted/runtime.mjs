@@ -44,19 +44,20 @@ export class Runtime {
     const h = c.HostConfig, env = c.Config.Env
     const expected = Object.entries(WORKER_ENVIRONMENT).map(([k,v]) => `${k}=${v}`).sort()
     const ulimits = {cpu:WORKER_LIMITS.cpuSeconds,nofile:WORKER_LIMITS.openFiles,fsize:WORKER_LIMITS.fileBytes,core:0}
-    if (c.Config.User !== '65532:65532' || c.Config.WorkingDir !== '/work' ||
-        JSON.stringify([...env].sort()) !== JSON.stringify(expected) ||
-        !h.ReadonlyRootfs || h.Privileged || h.NetworkMode !== 'none' || h.PidMode ||
-        h.IpcMode !== 'private' || h.CgroupnsMode !== 'private' || !h.Init ||
-        JSON.stringify(h.CapDrop) !== '["ALL"]' || h.CapAdd?.length ||
-        !h.SecurityOpt?.includes('no-new-privileges=true') || h.SecurityOpt?.some(s => /unconfined/i.test(s)) ||
-        !c.AppArmorProfile || c.AppArmorProfile === 'unconfined' ||
-        c.Mounts?.length || h.Binds?.length || h.Devices?.length || h.DeviceRequests?.length || Object.keys(h.PortBindings ?? {}).length ||
-        h.PidsLimit !== WORKER_LIMITS.pids || h.Memory !== WORKER_LIMITS.memoryBytes || h.MemorySwap !== h.Memory ||
-        h.NanoCpus !== WORKER_LIMITS.cpu * 1e9 || h.ShmSize !== 16777216 ||
-        !Array.isArray(h.Ulimits) || h.Ulimits.length !== Object.keys(ulimits).length ||
-        !Object.entries(ulimits).every(([name,value]) => h.Ulimits.some(u => u?.Name === name && u.Soft === value && u.Hard === value)) ||
-        h.LogConfig.Type !== 'none' || h.RestartPolicy.Name !== 'no') throw new Error('Runtime boundary unavailable')
+    const checks = {
+      identity: c.Config.User === '65532:65532' && c.Config.WorkingDir === '/work',
+      environment: Array.isArray(env) && JSON.stringify([...env].sort()) === JSON.stringify(expected),
+      filesystem: h.ReadonlyRootfs && !h.Privileged && !c.Mounts?.length && !h.Binds?.length,
+      namespaces: h.NetworkMode === 'none' && !h.PidMode && h.IpcMode === 'private' && h.CgroupnsMode === 'private' && h.Init,
+      capabilities: JSON.stringify(h.CapDrop) === '["ALL"]' && !h.CapAdd?.length,
+      lsm: h.SecurityOpt?.includes('no-new-privileges=true') && !h.SecurityOpt?.some(s => /unconfined/i.test(s)) && c.AppArmorProfile && c.AppArmorProfile !== 'unconfined',
+      devicesPorts: !h.Devices?.length && !h.DeviceRequests?.length && !Object.keys(h.PortBindings ?? {}).length,
+      resources: h.PidsLimit === WORKER_LIMITS.pids && h.Memory === WORKER_LIMITS.memoryBytes && h.MemorySwap === h.Memory && h.NanoCpus === WORKER_LIMITS.cpu * 1e9 && h.ShmSize === 16777216,
+      ulimits: Array.isArray(h.Ulimits) && h.Ulimits.length === Object.keys(ulimits).length && Object.entries(ulimits).every(([name,value]) => h.Ulimits.some(u => u?.Name === name && u.Soft === value && u.Hard === value)),
+      logsRestart: h.LogConfig.Type === 'none' && h.RestartPolicy.Name === 'no',
+    }
+    const failed = Object.entries(checks).filter(([,ok]) => !ok).map(([name]) => name)
+    if (failed.length) throw new Error('Runtime boundary unavailable: ' + failed.join(','))
     const requested = createWorkerArgs({jobId:job.id,leaseId:job.lease_id,imageId:this.imageId},{Id:this.imageId,Config:{}})
     const tmpfs = requested.flatMap((v,i) => v === '--tmpfs' ? [requested[i+1]] : [])
     if (JSON.stringify(Object.entries(h.Tmpfs ?? {}).map(([k,v]) => `${k}:${v}`).sort()) !== JSON.stringify(tmpfs.sort())) throw new Error('Runtime storage boundary unavailable')
