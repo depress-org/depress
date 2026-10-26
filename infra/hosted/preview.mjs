@@ -1,6 +1,6 @@
 import {posix} from 'node:path'
 import {Parser, DomHandler, DomUtils} from 'htmlparser2'
-import {parse, walk} from 'css-tree'
+import {parse, walk, tokenize, tokenTypes} from 'css-tree'
 import {POLICY, artifactBytes, decode, mime} from './protocol.mjs'
 const PRESENTATION_LIMITS=Object.freeze({operations:100000,importDepth:16,elementDepth:128})
 
@@ -43,6 +43,19 @@ export function previewFile(artifact, requested, prefix) {
   }
   const css=(source,from,parents=[],context='stylesheet')=>{
     if(parents.includes(from) || parents.length>=PRESENTATION_LIMITS.importDepth)throw new Error('Cyclic stylesheet')
+    // Tokenize incrementally BEFORE AST allocation. A byte cap alone permits
+    // hundreds of thousands of tiny rules and can OOM the shared API process.
+    const closing=[]
+    const pairs=new Map([[tokenTypes.Function,tokenTypes.RightParenthesis],[tokenTypes.LeftParenthesis,tokenTypes.RightParenthesis],[tokenTypes.LeftSquareBracket,tokenTypes.RightSquareBracket],[tokenTypes.LeftCurlyBracket,tokenTypes.RightCurlyBracket]])
+    const ends=new Set(pairs.values())
+    tokenize(source,type=>{
+      tick()
+      if(pairs.has(type)) {
+        closing.push(pairs.get(type))
+        if(closing.length>PRESENTATION_LIMITS.elementDepth)throw new Error('Preview depth limit')
+      }else if(ends.has(type) && closing.pop()!==type)throw new Error('Invalid stylesheet nesting')
+    })
+    if(closing.length)throw new Error('Invalid stylesheet nesting')
     const ast=parse(source,{positions:true,context}),edits=[]
     walk(ast,function(node){
       tick()
