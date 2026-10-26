@@ -56,7 +56,7 @@ export async function verifyGeneratedMalformedShortcodeEvidence(root) {
       assert.equal((await validateMigrationReport(output)).passed, false)
       await symlink(join(root, 'node_modules'), join(output, 'node_modules'), 'dir')
       execFileSync('npm', ['run', 'build', '--workspaces=false'], { cwd: output, stdio: 'inherit', timeout: 120000 })
-      const html = await readFile(join(output, 'dist/blog/first-post/index.html'), 'utf8')
+      const html = await readFile(join(output, 'dist/client/blog/first-post/index.html'), 'utf8')
       // Exact nested prose container, excluding the unchanged header/excerpt.
       const article = /<div class="prose[^\"]*">([\s\S]*?)<\/div>/.exec(html)?.[1]
       assert(article, 'missing actual rendered body container')
