@@ -82,7 +82,10 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
  await t.test('actual cgroup OOM and bounded attached raw-log flood; no persisted log driver',async()=>{
   await runProbe('memory',(r,c)=>{assert.notEqual(r.code,0);assert.equal(c.State.OOMKilled,true)},30000)
   const job={id:identifier(),lease_id:identifier()},id=await probe.create(job)
-  try{await assert.rejects(probe.call(['start','--attach','--interactive',id],{input:'{"op":"flood"}',timeoutMs:10000,maxOutputBytes:65536}),e=>e.code==='PROCESS_OUTPUT_LIMIT');const c=await probe.inspect(id);assert.equal(c.HostConfig.LogConfig.Type,'none')}
+  try{await assert.rejects(probe.call(['start','--attach','--interactive',id],{input:'{"op":"flood"}',timeoutMs:10000,maxOutputBytes:65536}),asyncError=>{
+   return asyncError.code==='PROCESS_OUTPUT_LIMIT'
+  });const c=await probe.inspect(id);assert.equal(c.HostConfig.LogConfig.Type,'none')}
+  catch(error){const c=await probe.inspect(id);console.log(JSON.stringify({fakeFlood:{state:c.State.Status,oom:c.State.OOMKilled,exit:c.State.ExitCode}}));throw error}
   finally{await probe.remove(job)}
  })
  await t.test('actual per-process CPU hard limit stops a busy workload, not just an argv claim',async()=>{
@@ -192,7 +195,15 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
    const {job}=await response.json();assert.equal((await request('/api/jobs/'+job.id,tokenB)).status,404)
    assert.equal((await request('/api/jobs/'+job.id,tokenB,{method:'DELETE'})).status,404)
    assert.equal(await executeOne(q,runtime),true)
-   const done=await q.forOwner('owner-A').get(job.id);assert.equal(done.status,'done',JSON.stringify(done))
+   const done=await q.forOwner('owner-A').get(job.id)
+   if(done.status!=='done'){
+    const diagnostic=new Runtime(process.env.DEPRESS25_DIAGNOSTIC_IMAGE),identity={id:identifier(),lease_id:identifier()}
+    try{
+     const id=await diagnostic.create(identity),r=await diagnostic.call(['start','--attach','--interactive',id],{input:JSON.stringify({...input,sql:Buffer.concat([sql,Buffer.from('\n-- FAKE_PRIVATE_SQL_25\n')]).toString('base64'),media:media.toString('base64')}),timeoutMs:180000})
+     console.log(JSON.stringify({fakeWorkloadDiagnosis:JSON.parse(r.stdout)}))
+    }finally{await diagnostic.remove(identity)}
+   }
+   assert.equal(done.status,'done',JSON.stringify(done))
    const rows=(await pool.query('SELECT * FROM private_jobs25 WHERE id=$1',[job.id])).rows[0]
    assert.equal(rows.input,null);assert.equal(await runtime.inspect(workerName(job.id,rows.lease_id)),undefined)
    const artifact=JSON.parse(await q.forOwner('owner-A').artifact(job.id,done.artifact.digest))

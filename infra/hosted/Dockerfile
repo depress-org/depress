@@ -19,3 +19,8 @@ ENTRYPOINT ["/usr/local/bin/node", "/opt/depress/infra/hosted/workload.mjs"]
 FROM worker AS probe
 COPY infra/hosted/integration/probe.mjs /opt/probe.mjs
 ENTRYPOINT ["/usr/local/bin/node", "/opt/probe.mjs"]
+
+# Fake-only diagnostic derivative; never selected by admission or production.
+FROM worker AS diagnostic
+COPY infra/hosted/integration/diagnostic-workload.mjs /opt/depress/infra/hosted/integration/diagnostic-workload.mjs
+ENTRYPOINT ["/usr/local/bin/node", "/opt/depress/infra/hosted/integration/diagnostic-workload.mjs"]

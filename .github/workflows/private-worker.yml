@@ -33,8 +33,10 @@ jobs:
         run: |
           docker build --target worker -f infra/hosted/Dockerfile -t depress25-worker .
           docker build --target probe -f infra/hosted/Dockerfile -t depress25-probe .
+          docker build --target diagnostic -f infra/hosted/Dockerfile -t depress25-diagnostic .
           echo "DEPRESS25_TEST_IMAGE=$(docker image inspect --format '{{.Id}}' depress25-worker)" >> "$GITHUB_ENV"
           echo "DEPRESS25_PROBE_IMAGE=$(docker image inspect --format '{{.Id}}' depress25-probe)" >> "$GITHUB_ENV"
+          echo "DEPRESS25_DIAGNOSTIC_IMAGE=$(docker image inspect --format '{{.Id}}' depress25-diagnostic)" >> "$GITHUB_ENV"
       - name: Fake-only Postgres on a dedicated bounded disposable filesystem
         run: |
           truncate -s 512M .tmp/postgres25.img
