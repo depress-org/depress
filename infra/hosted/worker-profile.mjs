@@ -120,7 +120,7 @@ export function createWorkerArgs(options, inspectedImage) {
     '--ulimit', `nofile=${WORKER_LIMITS.openFiles}:${WORKER_LIMITS.openFiles}`,
     '--ulimit', `fsize=${WORKER_LIMITS.fileBytes}:${WORKER_LIMITS.fileBytes}`,
     '--ulimit', 'core=0:0',
-    '--tmpfs', `/work:rw,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=65536,size=${WORKER_LIMITS.workBytes}`,
+    '--tmpfs', `/work:rw,exec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=65536,size=${WORKER_LIMITS.workBytes}`,
     '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=128,size=${WORKER_LIMITS.tempBytes}`,
     // No persistent raw runtime log at all; attached output is capped in #16.
     '--log-driver', 'none',

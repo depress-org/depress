@@ -6,6 +6,7 @@ import {createServer} from 'node:net'
 import {request as nodeRequest} from 'node:http'
 import {fork,spawn} from 'node:child_process'
 import {once} from 'node:events'
+import {constants as osConstants} from 'node:os'
 import {connect,Queue,migrate,QueueFull} from '../queue.mjs'
 import {Runtime} from '../runtime.mjs'
 import {executeOne,reap} from '../controller.mjs'
@@ -53,9 +54,20 @@ test('real disposable OCI, durable fake DB and private HTTP/browser lifecycle',{
    assert.equal(p.work,1073741824);assert.equal(p.tmp,16777216)
   })
  })
+ await t.test('real native build execution needs explicit work exec; temp remains noexec in both profiles',async()=>{
+  await runProbe('exec',r=>{assert.equal(r.code,0);assert.deepEqual(JSON.parse(r.stdout),{workExec:true,tmpNoexec:true})})
+  const job={id:identifier(),lease_id:identifier()},args=createWorkerArgs({jobId:job.id,leaseId:job.lease_id,imageId:probe.imageId},await probe.image())
+  const index=args.findIndex(a=>a.startsWith('/work:'));args[index]=args[index].replace(',exec,',',')
+  const id=await probe.checked(args)
+  try{
+   const config=await probe.inspect(id);assert.throws(()=>probe.verify(config,job),/Runtime storage boundary unavailable/)
+   const result=await probe.call(['start','--attach','--interactive',id],{input:'{"op":"exec"}'})
+   assert.equal(result.code,0);assert.deepEqual(JSON.parse(result.stdout),{workExec:false,tmpNoexec:true})
+  }finally{await probe.remove(job)}
+ })
  await t.test('actual process/FD/aggregate disk limits reject excess while ordinary files work',async()=>{
   for(const op of ['pids','fds','disk'])await runProbe(op,r=>{assert.equal(r.code,0,r.stderr);assert.equal(JSON.parse(r.stdout).rejected,true,op)},30000)
-  await runProbe('file',r=>assert(r.code!==0||JSON.parse(r.stdout).rejected),30000)
+  await runProbe('file',r=>assert(r.code===128+osConstants.signals.SIGXFSZ || r.code===0&&JSON.parse(r.stdout).rejected===true),30000)
   await runProbe('required-file',r=>{assert.equal(r.code,0);assert.equal(JSON.parse(r.stdout).bytes,140383608)},30000)
  })
  await t.test('real negative control: weakening a copied network profile exposes only the fake loopback fixture',async()=>{

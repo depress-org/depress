@@ -1,6 +1,7 @@
 // Adversarial fixture image ONLY. Never accepted as a request-selected command.
 import { readFileSync, writeFileSync, writeSync, existsSync, statfsSync, openSync, closeSync, symlinkSync, renameSync, unlinkSync } from 'node:fs'
-import { spawn } from 'node:child_process'
+import { spawn,spawnSync } from 'node:child_process'
+import {copyFileSync} from 'node:fs'
 import { connect } from 'node:net'
 const chunks=[];for await(const c of process.stdin)chunks.push(c)
 const {op,marker}=JSON.parse(Buffer.concat(chunks))
@@ -18,6 +19,10 @@ if(op==='boundary'){
     cgroupReadonly:denied('/sys/fs/cgroup/pids.max'),work:Number(statfsSync('/work').blocks*statfsSync('/work').bsize),tmp:Number(statfsSync('/tmp').blocks*statfsSync('/tmp').bsize),
     privatePid:readFileSync('/proc/1/comm','utf8').trim().includes('docker-init')}
   process.stdout.write(JSON.stringify(output))
+}else if(op==='exec'){
+  copyFileSync('/usr/bin/true','/work/exec-probe');copyFileSync('/usr/bin/true','/tmp/exec-probe')
+  const work=spawnSync('/work/exec-probe'),temp=spawnSync('/tmp/exec-probe')
+  process.stdout.write(JSON.stringify({workExec:work.status===0,tmpNoexec:temp.error?.code==='EACCES'}))
 }else if(op==='network-fixture'){
   const denied=await new Promise(r=>{const s=connect({host:'127.0.0.1',port:18726});s.setTimeout(500);s.on('connect',()=>{s.destroy();r(false)});s.on('error',()=>r(true));s.on('timeout',()=>{s.destroy();r(true)})})
   process.stdout.write(JSON.stringify({denied}))

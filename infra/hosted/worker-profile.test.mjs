@@ -43,7 +43,7 @@ test('filesystem, UID, namespace and capability policy has no host mounts or soc
   for (const forbidden of ['--mount', '--volume', '-v', '--volumes-from', '--device', '--privileged', '--use-api-socket', '--publish', '-p', '--publish-all', '--pid', '--userns', '--cap-add', '--env-file', '--runtime'])
     assert.ok(!args.includes(forbidden), forbidden)
   assert.deepEqual(values(args, '--tmpfs'), [
-    '/work:rw,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=65536,size=1073741824',
+    '/work:rw,exec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=65536,size=1073741824',
     '/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700,nr_inodes=128,size=16777216',
   ])
 })
@@ -60,6 +60,11 @@ test('profile requests finite CPU/RAM/swap/PID/file/FD limits without disabling 
   assert.equal(WORKER_LIMITS.wallTimeMs, 180000) // broker duty; NOT enforced by this renderer
 })
 
+test('work explicitly permits native build executables while temp stays noexec',()=>{
+ const args=createWorkerArgs(options)
+ assert(values(args,'--tmpfs').find(v=>v.startsWith('/work:')).split(':')[1].split(',').includes('exec'))
+ assert(values(args,'--tmpfs').find(v=>v.startsWith('/tmp:')).split(':')[1].split(',').includes('noexec'))
+})
 test('no raw runtime log is persisted; attached capture is a separate bound', () => {
   assert.equal(value(args, '--log-driver'), 'none')
   assert.deepEqual(values(args, '--log-opt'), [])

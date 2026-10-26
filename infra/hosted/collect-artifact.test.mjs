@@ -87,6 +87,15 @@ test('collector preserves case-insensitive duplicate-path rejection', async t =>
   await assert.rejects(collectArtifact(client), /Duplicate artifact path/)
 })
 
+test('preview excludes executable CMS bundles without truncating any admitted static content',async t=>{
+ const {client}=await fixture(t)
+ await writeFile(join(client,'index.html'),'<h1>All preview content</h1>')
+ await writeFile(join(client,'cms.js'),Buffer.alloc(POLICY.artifactBytes+1,65))
+ const artifact=await collectArtifact(client)
+ assert.deepEqual(artifact.files,[{path:'index.html',data:Buffer.from('<h1>All preview content</h1>').toString('base64')}])
+ assert.throws(()=>artifactBytes({kind:'preview-only',files:[{path:'cms.js',data:''}]}),/Invalid artifact path/)
+})
+
 test('collector rejects an empty artifact after MIME filtering', async t => {
   const { client } = await fixture(t)
   await writeFile(join(client, 'ignored.map'), 'not public')

@@ -78,6 +78,15 @@ for(const reason of ['cancellation','deadline','lost-lock'])test(`late create ca
  const r={create:async()=>{allowed=false;return id},call:async()=>{started++;return {code:1}},remove:async()=>removed++}
  await executeOne(q,r);assert.equal(started,0);assert.equal(removed,1)
 })
+test('loss only after initiating start removes the worker without accepting an artifact',async()=>{
+ const events=[],artifact={kind:'preview-only',files:[{path:'index.html',data:'eA=='}]};let live=true
+ const q={claim:async()=>job,current:async()=>job,
+  withJob:async(_,fn)=>fn(async()=>{if(!live)throw new Error('Lost fence after start')}),
+  finish:async(_,output)=>events.push(output?'done':'failed'),retry:async()=>events.push('retry')}
+ const r={create:async()=>id,call:async()=>{events.push('start');live=false;return {code:0,stderr:'',stdout:JSON.stringify({ok:true,artifact})}},
+  inspect:async()=>config(),verify:()=>true,remove:async()=>events.push('removed')}
+ await executeOne(q,r);assert.deepEqual(events,['start','removed','failed'])
+})
 test('DB-only expiry still runs during runtime discovery outage without freeing uncertain workers',async()=>{
  const events=[],q={pendingReap:async()=>[],sweep:async()=>events.push('sweep'),finish:async()=>events.push('finish')}
  await assert.rejects(reap(q,{ownedContainers:async()=>{throw new Error('fake daemon unavailable')}}))

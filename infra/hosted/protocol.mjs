@@ -29,7 +29,9 @@ export function inputBytes(input) {
   if (!input.wxr || total > POLICY.inputBytes) throw new Error('Input limit')
   return total
 }
-const mimes = Object.freeze({ html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', json: 'application/json', txt: 'text/plain; charset=utf-8', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', woff: 'font/woff', woff2: 'font/woff2', ico: 'image/x-icon' })
+// A script-disabled static preview, not an interactive CMS/client distribution.
+// Executable bundles are neither collected nor accepted from workload output.
+const mimes = Object.freeze({ html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8', json: 'application/json', txt: 'text/plain; charset=utf-8', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', woff: 'font/woff', woff2: 'font/woff2', ico: 'image/x-icon' })
 export function mime(path) { return mimes[path.split('.').at(-1)] }
 export function artifactBytes(artifact) {
   exact(artifact, ['kind', 'files'])
