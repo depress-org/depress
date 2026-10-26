@@ -28,6 +28,9 @@
   },
   "files": [
     "dist",
+    "!dist/**/__tests__/**",
+    "!dist/**/__fixtures__/**",
+    "!dist/**/*.test.*",
     "README.md"
   ],
   "publishConfig": {
@@ -66,8 +69,8 @@
     "url": "https://github.com/depress-org/depress/issues"
   },
   "dependencies": {
-    "@depress-org/core": "*",
-    "@depress-org/wp-migrate": "*",
+    "@depress-org/core": "^0.1.0",
+    "@depress-org/wp-migrate": "^0.1.0",
     "chalk": "^5.0.0",
     "commander": "^12.0.0",
     "fast-xml-parser": "^4.5.7",
@@ -75,7 +78,7 @@
     "inquirer": "^9.0.0",
     "ora": "^8.0.0",
     "wordpress-export-to-markdown": "^3.0.4",
-    "wrangler": "^3.114.0"
+    "wrangler": "4.152.0"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.0",
@@ -85,7 +88,7 @@
     "vitest": "4.1.12"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "node": "^22.23.4 || ^24.22.1",
+    "npm": "^10.8.2 || ^11.21.1"
   }
 }

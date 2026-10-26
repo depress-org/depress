@@ -43,10 +43,65 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: mkdir -p .tmp && npm ci --legacy-peer-deps
-      - name: Build migration packages
-        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress
+      - name: Build migration packages and both archive adapters (dependency order)
+        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress --workspace=@depress-org/job-core --workspace=@depress-org/telegram-bot --workspace=@depress-org/web
       - name: Migrate WXR and actually build generated Astro site
         run: npm run test:integration
+      - name: PR-08 archive via built web and bot, offline origin, reports and Astro builds
+        timeout-minutes: 15
+        run: npm run test:media-archive
       - name: Cold consumer install, actual build and unchanged-lock rebuild (no deploy)
         timeout-minutes: 15
         run: node scripts/cold-consumer.mjs
+
+  toolchain-consumers:
+    name: Patched consumers Node ${{ matrix.node }} npm ${{ matrix.npm }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: '22.23.4'
+            npm: '10.8.2'
+          - node: '24.22.1'
+            npm: '11.21.1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm install --global npm@${{ matrix.npm }}
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps
+      - run: npm run build && npm run typecheck && npm test
+      - name: Cold scaffold and complete default theme, CMS/media/runtime/audits and unchanged-lock rebuilds
+        run: node scripts/cold-consumer.mjs && node scripts/default-consumer.mjs
+
+  oss-packaging:
+    name: OSS packaging and scaffold consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: mkdir -p .tmp && npm ci --legacy-peer-deps
+      - name: Build the three public packages
+        run: npm run build --workspace=@depress-org/core --workspace=@depress-org/wp-migrate --workspace=@depress-org/depress
+      - name: Real installed CLI and library; default build is measured NO-GO under issue 26
+        run: npm run test:oss-packaging
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oss-packaging-evidence
+          include-hidden-files: true
+          path: |
+            .tmp/oss-consumer-*/result.json
+            .tmp/oss-consumer-*/*.log

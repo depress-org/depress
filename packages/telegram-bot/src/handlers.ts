@@ -23,7 +23,7 @@ export class Handlers {
     this.clear(key)
     const timer = setTimeout(() => {
       this.timers.delete(key)
-      if (!this.current(key, state) || !['awaiting_sql', 'awaiting_theme'].includes(state.stage)) return
+      if (!this.current(key, state) || !['awaiting_sql', 'awaiting_media', 'awaiting_theme'].includes(state.stage)) return
       this.deps.sessions.reset(key)
       void this.safe(() => this.deps.bot.cleanup(state.uploadDir))
     }, this.deps.sessionTtlMs)
@@ -33,16 +33,16 @@ export class Handlers {
     const old = this.deps.sessions.get(key)
     this.deps.sessions.reset(key); this.clear(key)
     // In-flight uploads and jobs own their cleanup until they settle.
-    if (['idle', 'awaiting_sql', 'awaiting_theme'].includes(old.stage)) await this.safe(() => this.deps.bot.cleanup(old.uploadDir))
-    await this.safe(() => this.deps.bot.sendMessage(chatId, 'Welcome! Send a WordPress export (.xml/.wxr). Local migration only; media archives are not supported yet.'))
+    if (['idle', 'awaiting_sql', 'awaiting_media', 'awaiting_theme'].includes(old.stage)) await this.safe(() => this.deps.bot.cleanup(old.uploadDir))
+    await this.safe(() => this.deps.bot.sendMessage(chatId, 'Welcome! Send a WordPress export (.xml/.wxr). Local migration only. Optional SQL and uploads ZIP follow as separate stages.'))
   }
   async document(key: string, chatId: number, file: IncomingFile) {
     const { bot, sessions } = this.deps
     const state = sessions.get(key)
-    if (!['idle', 'awaiting_sql'].includes(state.stage)) return
-    const role = state.stage === 'idle' ? 'wxr' : 'sql'
+    if (!['idle', 'awaiting_sql', 'awaiting_media'].includes(state.stage)) return
+    const role = state.stage === 'idle' ? 'wxr' : state.stage === 'awaiting_sql' ? 'sql' : 'media'
     if (!bot.accepts(file, role)) {
-      await this.safe(() => bot.sendMessage(chatId, role === 'wxr' ? 'Send a named WXR .xml/.wxr within the upload size limit. Media archives are not supported.' : 'Expected a named SQL .sql dump within the upload size limit, or /skip. Media archives are not supported.'))
+      await this.safe(() => bot.sendMessage(chatId, role === 'wxr' ? 'Send a named WXR .xml/.wxr within the upload size limit.' : role === 'sql' ? 'Expected a named SQL .sql dump within the upload size limit, or /skip. ZIP belongs to the next media stage.' : 'Expected uploads .zip containing wp-content/uploads/ media files, or /skip.'))
       return
     }
     const previous = state.stage
@@ -55,22 +55,29 @@ export class Handlers {
       const path = await bot.downloadFile(file, role, dir)
       if (!this.current(key, state)) { await this.safe(() => bot.cleanup(dir)); return }
       if (role === 'wxr') { state.wxrPath = path; state.stage = 'awaiting_sql' }
-      else { state.sqlDumpPath = path; state.stage = 'awaiting_theme' }
+      else if (role === 'sql') { state.sqlDumpPath = path; state.stage = 'awaiting_media' }
+      else { state.mediaDir = path; state.stage = 'awaiting_theme' }
       this.expire(key, state)
-      if (role === 'wxr') await this.safe(() => bot.sendMessage(chatId, 'Got your WXR export. Send a SQL dump or /skip. Media archives are not supported yet.'))
+      if (role === 'wxr') await this.safe(() => bot.sendMessage(chatId, 'Got your WXR export. Send a SQL dump or /skip; optional media ZIP is next.'))
+      else if (role === 'sql') await this.mediaPrompt(chatId)
       else await this.safe(() => bot.sendThemeKeyboard(chatId, state.generation))
     } catch {
       if (!this.current(key, state)) { await this.safe(() => bot.cleanup(dir)); return }
       if (previous === 'idle') { sessions.reset(key); await this.safe(() => bot.cleanup(dir)) }
-      else { state.stage = 'awaiting_sql'; this.expire(key, state) }
+      else { state.stage = previous; this.expire(key, state) }
       await this.safe(() => bot.sendMessage(chatId, 'Upload failed validation or download. Retry a valid file, or /start.'))
     }
   }
   async skip(key: string, chatId: number) {
     const state = this.deps.sessions.get(key)
-    if (state.stage !== 'awaiting_sql') return
-    state.stage = 'awaiting_theme'; this.expire(key, state)
-    await this.safe(() => this.deps.bot.sendThemeKeyboard(chatId, state.generation))
+    if (!['awaiting_sql', 'awaiting_media'].includes(state.stage)) return
+    const mediaNext = state.stage === 'awaiting_sql'
+    state.stage = mediaNext ? 'awaiting_media' : 'awaiting_theme'; this.expire(key, state)
+    if (mediaNext) await this.mediaPrompt(chatId)
+    else await this.safe(() => this.deps.bot.sendThemeKeyboard(chatId, state.generation))
+  }
+  private async mediaPrompt(chatId: number) {
+    await this.safe(() => this.deps.bot.sendMessage(chatId, 'Send optional uploads .zip with exact wp-content/uploads/ layout, or /skip. Missing media will be reported, not claimed preserved.'))
   }
   async theme(key: string, chatId: number, generation: string, themeId: string, store: JobStore) {
     const { bot, sessions } = this.deps
@@ -78,7 +85,7 @@ export class Handlers {
     if (state.stage !== 'awaiting_theme' || generation !== state.generation || !isValidTheme(themeId)) return
     state.stage = 'starting'; this.clear(key) // suppress concurrent callbacks before async create
     try {
-      const job = await store.create({ wxrPath: state.wxrPath!, sqlDumpPath: state.sqlDumpPath, themeId, mode: 'migrate-only' })
+      const job = await store.create({ wxrPath: state.wxrPath!, sqlDumpPath: state.sqlDumpPath, mediaDir: state.mediaDir, themeId, mode: 'migrate-only' })
       if (!this.current(key, state)) { await this.safe(() => bot.cleanup(state.uploadDir)); return }
       state.stage = 'running'; state.jobId = job.id
       // Own the promise, including terminal notification and cleanup. Observer callbacks

@@ -1,8 +1,8 @@
 import * as fs from 'node:fs/promises'
 import { join, resolve, dirname } from 'node:path'
-import { XMLParser, XMLValidator } from 'fast-xml-parser'
+import { ingestMediaArchive, validateSourceUpload } from '@depress-org/job-core'
 
-export type FileRole = 'wxr' | 'sql'
+export type FileRole = 'wxr' | 'sql' | 'media'
 export interface IncomingFile { fileId: string; fileName?: string; size?: number }
 export const uploadIO = { mkdir: fs.mkdir, mkdtemp: fs.mkdtemp, writeFile: fs.writeFile, rm: fs.rm }
 
@@ -42,7 +42,7 @@ export class Uploads {
     console.error('Owned bot upload cleanup failed after retries; operator cleanup required.')
   }
   accepts(file: IncomingFile, role: FileRole): boolean {
-    return !!file.fileName && (role === 'wxr' ? /\.(xml|wxr)$/i : /\.sql$/i).test(file.fileName)
+    return !!file.fileName && (role === 'wxr' ? /\.(xml|wxr)$/i : role === 'sql' ? /\.sql$/i : /\.zip$/i).test(file.fileName)
       && (file.size === undefined || Number.isSafeInteger(file.size) && file.size > 0 && file.size <= this.maxBytes)
   }
   async download(file: IncomingFile, role: FileRole, dir: string, getUrl: (signal: AbortSignal) => Promise<string>): Promise<string> {
@@ -72,16 +72,8 @@ export class Uploads {
         return Buffer.concat(chunks)
       } finally { signal.removeEventListener('abort', abort); reader.releaseLock() }
     })
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-    if (text.includes('\0')) throw new Error('INVALID_TEXT')
-    if (role === 'wxr') {
-      // No entity expansion or external declarations; parsing is admission, not migration.
-      if (/<!DOCTYPE|<!ENTITY/i.test(text) || XMLValidator.validate(text) !== true) throw new Error('INVALID_WXR')
-      const parsed = new XMLParser({ processEntities: false }).parse(text)
-      if (!parsed?.rss?.channel?.['wp:wxr_version']) throw new Error('INVALID_WXR')
-    } else if (/^\s*</.test(text) || !/(?:^|\n)\s*(?:CREATE TABLE|INSERT INTO|DROP TABLE|SET\s|-- MySQL dump|-- MariaDB dump)/i.test(text)) {
-      throw new Error('INVALID_SQL')
-    }
+    if (role === 'media') return (await ingestMediaArchive(bytes, dir, { compressedBytes: this.maxBytes, timeoutMs: this.timeoutMs })).mediaDir
+    validateSourceUpload(bytes, role)
     try { await uploadIO.writeFile(dest, bytes, { flag: 'wx', mode: 0o600 }) }
     catch (error) { await uploadIO.rm(dest, { force: true }).catch(() => {}); throw error }
     return dest

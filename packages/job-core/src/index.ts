@@ -1,2 +1,5 @@
+export { ingestMediaArchive, MediaArchiveError, DEFAULT_MEDIA_ARCHIVE_LIMITS } from './media-archive.js'
+export type { IngestedMediaArchive, MediaArchiveLimits } from './media-archive.js'
+export { validateSourceUpload, SourceUploadError } from './source-upload.js'
 export { runJob, cleanupJob, isValidTheme, listThemes, getThemeAdapter, InMemoryJobStore } from './pipeline.js'
 export type { Job, JobInput, JobStatus, JobStore, DeployTargetId, RunJobOptions } from './pipeline.js'
