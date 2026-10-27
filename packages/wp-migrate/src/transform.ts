@@ -11,6 +11,7 @@ export async function transformPosts(
   outputDir: string,
   mediaMapping = new Map<string, string>(),
   attachmentAlts = new Map<string, string>(),
+  tokens?: { prepare(post: WPPost): string; transform(post: WPPost, markdown: string): Promise<string> },
 ): Promise<MigrationReport> {
   for (const type of ['post', 'page']) assertUniqueSegments(posts.filter(p => p.type === type).map(p => p.slug))
   await assertSafeTree(outputDir)
@@ -51,10 +52,14 @@ export async function transformPosts(
         continue
       }
 
-      const { content: cleaned, warnings, shortcodeMarkers } = handleShortcodes(post.content)
+      const { content: cleaned, warnings, shortcodeMarkers } = tokens
+        ? { content: tokens.prepare(post), warnings: [], shortcodeMarkers: [] }
+        : handleShortcodes(post.content)
       // Recovered shortcode bodies are literal text, never a second Markdown input.
       const literalMarkers = shortcodeMarkers.map(marker => ({ ...marker, inner: marker.inner.replace(/[\\`*_{}\[\]()!#<>]/g, char => `&#${char.charCodeAt(0)};`) }))
-      const markdown = applyShortcodeMarkers(converter.turndown(cleaned), literalMarkers).replace(/</g, '&lt;').replace(/\{/g, '&#123;')
+      const converted = converter.turndown(cleaned)
+      let markdown = (tokens ? converted : applyShortcodeMarkers(converted, literalMarkers)).replace(/</g, '&lt;').replace(/\{/g, '&#123;')
+      if (tokens) markdown = await tokens.transform(post, markdown)
       const frontmatter = buildFrontmatter(post, markdown)
       const warnBlock = warnings.length > 0
         ? `\n<!-- depress-warnings: ${warnings.join(' | ')} -->\n`

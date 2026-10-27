@@ -73,6 +73,14 @@ describe('source inventory and migration reports', () => {
     expect((await writeMigrationReports(d, manifest(item(1, 'post', 'hello', 'publish', '', source)), layout)).qualityPassed).toBe(true)
     expect((await validateMigrationReport(d)).passed).toBe(true)
   })
+  it('reports a normal omitted page adapter as source-linked unsupported, never unsafe-path', async () => {
+    const d = await temp(); await good(d)
+    const r = await writeMigrationReports(d, manifest(item(1) + item(2, 'page', 'about')), { ...layout, pagesDir: undefined })
+    expect(r.items.find(i => i.id === 2)).toMatchObject({ status: 'unsupported', findings: [{ code: 'unsupported-page', detail: expect.stringContaining('page 2') }] })
+    expect(codes(r)).not.toContain('unsafe-path')
+    expect(r.qualityPassed).toBe(false)
+    expect((await validateMigrationReport(d)).passed).toBe(false)
+  })
   it('fails closed for unknown prose renderers even with identical literal body', async () => {
     const d = await temp(); await good(d)
     await put(d, 'src/content/articles/hello/index.md', '---\ntitle: Hello\nauthor: alice\n---\nBody')
@@ -132,7 +140,8 @@ describe('source inventory and migration reports', () => {
     const d = await temp(); await good(d)
     const r = await inspectMigration(d, manifest(item(1, 'post', 'hello', 'publish', meta('color', 'red') + meta('_thumbnail_id', '99'), '[gallery ids="2,3"]')), layout)
     expect(codes(r)).toEqual(expect.arrayContaining(['unsupported-shortcode', 'unsupported-custom-field', 'missing-featured-attachment']))
-    expect(r.items[0].findings.find(f => f.code === 'unsupported-shortcode')?.detail).toContain('ids="2,3"')
+    expect(r.items[0].findings.find(f => f.code === 'unsupported-shortcode')?.detail).toMatch(/Source occurrence [a-f0-9]{64}/)
+    expect(JSON.stringify(r.compatibility)).not.toContain('ids=')
   })
   it('accounts for attachment bytes and never claims unused source alt preserved', async () => {
     const d = await temp(); await good(d)

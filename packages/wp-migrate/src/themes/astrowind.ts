@@ -115,33 +115,7 @@ export const footerData = {
     // 3. Patch astro.config.ts — static output + Node adapter + Keystatic
     const astroCfgPath = join(outputDir, 'astro.config.ts')
     if (existsSync(astroCfgPath)) {
-      let cfg = await readFile(astroCfgPath, 'utf-8')
-
-      if (opts.siteUrl) {
-        if (/site:\s*['"`]/.test(cfg)) {
-          cfg = cfg.replace(/(site:\s*)(['"`])[^'"`]*\2/, (_m, key) => `${key}${sourceString(opts.siteUrl)}`)
-        } else {
-          cfg = cfg.replace('export default defineConfig({', () => `export default defineConfig({\n  site: ${sourceString(opts.siteUrl)},`)
-        }
-      }
-
-      // Add Keystatic: switch to hybrid output, add node adapter + react + keystatic
-      if (!cfg.includes('keystatic')) {
-        cfg = cfg.replace(
-          /import \{ defineConfig \} from 'astro\/config';/,
-          `import { defineConfig } from 'astro/config';\nimport node from '@astrojs/node';\nimport react from '@astrojs/react';\nimport keystatic from '@keystatic/astro';`,
-        )
-        // Keep output: 'static' (Astro 7 default, supports per-page prerender=false)
-        // Just inject the node adapter before integrations
-        cfg = cfg.replace(
-          /export default defineConfig\(\{/,
-          `export default defineConfig({\n  adapter: node({ mode: 'standalone' }),`,
-        )
-        cfg = cfg.replace(
-          /(\bintegrations:\s*\[)/,
-          `$1\n    react(),\n    keystatic(),`,
-        )
-      }
+      const cfg = patchAstrowindAstroConfig(await readFile(astroCfgPath, 'utf-8'), opts.siteUrl)
 
       await writeFile(astroCfgPath, cfg, 'utf-8')
     }
@@ -199,6 +173,37 @@ export default config({
     }
 
   },
+}
+
+/** Pure canonical adapter config; shared with bounded report-context attestation. */
+export function patchAstrowindAstroConfig(cfg: string, siteUrl?: string): string {
+
+  if (siteUrl) {
+    if (/site:\s*['"`]/.test(cfg)) {
+      cfg = cfg.replace(/(site:\s*)(['"`])[^'"`]*\2/, (_m, key) => `${key}${sourceString(siteUrl)}`)
+    } else {
+      cfg = cfg.replace('export default defineConfig({', () => `export default defineConfig({\n  site: ${sourceString(siteUrl)},`)
+    }
+  }
+
+  // Add Keystatic: switch to hybrid output, add node adapter + react + keystatic
+  if (!cfg.includes('keystatic')) {
+    cfg = cfg.replace(
+      /import \{ defineConfig \} from 'astro\/config';/,
+      `import { defineConfig } from 'astro/config';\nimport node from '@astrojs/node';\nimport react from '@astrojs/react';\nimport keystatic from '@keystatic/astro';`,
+    )
+    // Keep output: 'static' (Astro 7 default, supports per-page prerender=false)
+    // Just inject the node adapter before integrations
+    cfg = cfg.replace(
+      /export default defineConfig\(\{/,
+      `export default defineConfig({\n  adapter: node({ mode: 'standalone' }),`,
+    )
+    cfg = cfg.replace(
+      /(\bintegrations:\s*\[)/,
+      `$1\n    react(),\n    keystatic(),`,
+    )
+  }
+  return cfg
 }
 
 function serializeAstrowindLinks(navItems: NavItem[], indent = '    '): string {
